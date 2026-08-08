@@ -1,0 +1,18 @@
+# Best-practice rules over rendered manifests.
+#
+# scope: document  — bindings: doc, renderNamespace
+# scope: container — bindings: doc, container (only workload kinds in kindFilter)
+ruleSet: template-best-practices
+rules:
+  - id: hardcoded-namespace
+    severity: error
+    scope: document
+    expr: '!has(doc.metadata) || !has(doc.metadata.namespace) || doc.metadata.namespace == "" || doc.metadata.namespace == renderNamespace'
+    message: '{{ doc.kind }}/{{ doc.metadata.name }}: hardcoded namespace "{{ doc.metadata.namespace }}" (use .Release.Namespace instead)'
+
+  - id: missing-resource-limits
+    severity: warning
+    scope: container
+    kindFilter: [Deployment, StatefulSet, DaemonSet, Job, CronJob]
+    expr: 'has(container.resources) && has(container.resources.limits) && size(container.resources.limits) > 0'
+    message: '{{ doc.kind }}/{{ doc.metadata.name }}: container "{{ container.name }}" has no resources.limits'

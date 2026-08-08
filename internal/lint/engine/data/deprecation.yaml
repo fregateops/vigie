@@ -1,0 +1,48 @@
+# Kubernetes API deprecation table.
+#
+# At load time, the engine expands this single declaration into one rule per
+# (removedIn, kind) group: e.g. `deprecation_k8s-api_1.22-Ingress` covers both
+# `extensions/v1beta1` and `networking.k8s.io/v1beta1` Ingress entries.
+# Individual deprecations can therefore be disabled independently via
+# lint.disableRules / --disable-rules without silencing the whole rule set.
+#
+# The "removedAPI" scope filters each generated rule's table by
+# lint.kubeVersions[0]: entries whose `removedIn` is > the target version are
+# skipped. With no target version, every entry is active (conservative
+# default).
+ruleSet: deprecation
+rules:
+  - id: k8s-api
+    severity: error
+    scope: removedAPI
+    helpURI: https://kubernetes.io/docs/reference/using-api/deprecation-guide/
+    removedAPIs:
+      # Removed in 1.16
+      - { apiVersion: extensions/v1beta1, kind: Deployment,    removedIn: "1.16", replacement: apps/v1 }
+      - { apiVersion: extensions/v1beta1, kind: DaemonSet,     removedIn: "1.16", replacement: apps/v1 }
+      - { apiVersion: extensions/v1beta1, kind: StatefulSet,   removedIn: "1.16", replacement: apps/v1 }
+      - { apiVersion: extensions/v1beta1, kind: ReplicaSet,    removedIn: "1.16", replacement: apps/v1 }
+      - { apiVersion: extensions/v1beta1, kind: NetworkPolicy, removedIn: "1.16", replacement: networking.k8s.io/v1 }
+
+      # Removed in 1.22
+      - { apiVersion: extensions/v1beta1,                  kind: Ingress,                       removedIn: "1.22", replacement: networking.k8s.io/v1 }
+      - { apiVersion: networking.k8s.io/v1beta1,           kind: Ingress,                       removedIn: "1.22", replacement: networking.k8s.io/v1 }
+      - { apiVersion: apiextensions.k8s.io/v1beta1,        kind: CustomResourceDefinition,      removedIn: "1.22", replacement: apiextensions.k8s.io/v1 }
+      - { apiVersion: rbac.authorization.k8s.io/v1beta1,   kind: ClusterRole,                   removedIn: "1.22", replacement: rbac.authorization.k8s.io/v1 }
+      - { apiVersion: rbac.authorization.k8s.io/v1beta1,   kind: ClusterRoleBinding,            removedIn: "1.22", replacement: rbac.authorization.k8s.io/v1 }
+      - { apiVersion: rbac.authorization.k8s.io/v1beta1,   kind: Role,                          removedIn: "1.22", replacement: rbac.authorization.k8s.io/v1 }
+      - { apiVersion: rbac.authorization.k8s.io/v1beta1,   kind: RoleBinding,                   removedIn: "1.22", replacement: rbac.authorization.k8s.io/v1 }
+      - { apiVersion: admissionregistration.k8s.io/v1beta1, kind: MutatingWebhookConfiguration, removedIn: "1.22", replacement: admissionregistration.k8s.io/v1 }
+      - { apiVersion: admissionregistration.k8s.io/v1beta1, kind: ValidatingWebhookConfiguration, removedIn: "1.22", replacement: admissionregistration.k8s.io/v1 }
+
+      # Removed in 1.25
+      - { apiVersion: batch/v1beta1,   kind: CronJob,             removedIn: "1.25", replacement: batch/v1 }
+      - { apiVersion: policy/v1beta1,  kind: PodDisruptionBudget, removedIn: "1.25", replacement: policy/v1 }
+      - { apiVersion: policy/v1beta1,  kind: PodSecurityPolicy,   removedIn: "1.25", replacement: "(removed entirely)" }
+
+      # Removed in 1.26
+      - { apiVersion: autoscaling/v2beta1, kind: HorizontalPodAutoscaler, removedIn: "1.26", replacement: autoscaling/v2 }
+      - { apiVersion: autoscaling/v2beta2, kind: HorizontalPodAutoscaler, removedIn: "1.26", replacement: autoscaling/v2 }
+
+      # Removed in 1.27
+      - { apiVersion: storage.k8s.io/v1beta1, kind: CSIStorageCapacity, removedIn: "1.27", replacement: storage.k8s.io/v1 }

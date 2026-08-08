@@ -3,6 +3,7 @@ module github.com/fregateops/vigie
 go 1.26.2
 
 require (
+	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/google/cel-go v0.26.0
 	github.com/spf13/cobra v1.10.2
 	gopkg.in/yaml.v3 v3.0.1
@@ -13,7 +14,6 @@ require (
 	cel.dev/expr v0.24.0 // indirect
 	github.com/BurntSushi/toml v1.3.2 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
-	github.com/Masterminds/semver/v3 v3.2.1 // indirect
 	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.4 // indirect

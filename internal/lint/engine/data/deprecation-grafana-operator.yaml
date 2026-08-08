@@ -1,0 +1,22 @@
+# Grafana Operator deprecated CRD apiVersions.
+#
+# Grafana Operator v5 renamed the API group from `integreatly.org/v1alpha1`
+# to `grafana.integreatly.org/v1beta1` and removed `GrafanaNotificationChannel`
+# entirely (no direct replacement — drive notifications via the Grafana API).
+# Charts targeting Grafana Operator v5+ must use the new group; the old group
+# is fully unserved.
+#
+# Severity is `warning` — these rules notify but do not block CI. Disable an
+# individual finding via `--disable-rules=deprecation_grafana-operator_5.0-<Kind>`.
+ruleSet: deprecation
+rules:
+  - id: grafana-operator
+    project: grafana-operator
+    severity: warning
+    scope: removedAPI
+    helpURI: https://grafana.github.io/grafana-operator/docs/
+    removedAPIs:
+      - { apiVersion: integreatly.org/v1alpha1, kind: Grafana,                    removedIn: "5.0", replacement: grafana.integreatly.org/v1beta1 }
+      - { apiVersion: integreatly.org/v1alpha1, kind: GrafanaDashboard,           removedIn: "5.0", replacement: grafana.integreatly.org/v1beta1 }
+      - { apiVersion: integreatly.org/v1alpha1, kind: GrafanaDatasource,          removedIn: "5.0", replacement: grafana.integreatly.org/v1beta1 }
+      - { apiVersion: integreatly.org/v1alpha1, kind: GrafanaNotificationChannel, removedIn: "5.0", replacement: "(removed entirely; drive notifications via the Grafana API)" }

@@ -1,0 +1,32 @@
+# Chart.yaml structural rules.
+#
+# Bindings available in `expr` and `message`:
+#   chart.apiVersion, chart.name, chart.version, chart.description,
+#   chart.type, chart.appVersion, chart.home, chart.icon
+#   chart.versionValid (precomputed boolean: is chart.version a valid semver?)
+ruleSet: chart-yaml
+rules:
+  - id: api-version
+    severity: error
+    scope: chart
+    expr: 'chart.apiVersion == "v2"'
+    message: 'apiVersion must be v2 (got "{{ chart.apiVersion }}")'
+    helpURI: https://helm.sh/docs/topics/charts/#the-chartyaml-file
+
+  - id: name
+    severity: error
+    scope: chart
+    expr: 'chart.name != ""'
+    message: chart name is required
+
+  - id: version
+    severity: error
+    scope: chart
+    expr: 'chart.version != "" && chart.versionValid'
+    message: 'chart version is required and must be valid semver (got "{{ chart.version }}")'
+
+  - id: description
+    severity: warning
+    scope: chart
+    expr: 'chart.description != ""'
+    message: chart description is recommended
