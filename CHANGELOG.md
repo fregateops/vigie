@@ -12,6 +12,7 @@ All notable changes to this project are documented in this file.
 - *(release)* Ignore transient release_notes.md
 - *(release)* Make goreleaser replace GH release body
 - *(release)* Write release notes and verify it
+- *(release)* Remove changelog config from goreleaser
 
 ### Documentation
 
