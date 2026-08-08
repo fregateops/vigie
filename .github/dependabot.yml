@@ -1,0 +1,33 @@
+version: 2
+
+updates:
+  # Go modules. commit-message prefix + scope produces `chore(deps): ...`
+  # (and `chore(deps-dev): ...`), which cliff.toml skips from the changelog.
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    groups:
+      # Batch minor/patch bumps into one PR; majors stay separate for review.
+      go-dependencies:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # GitHub Actions used by the CI and release workflows.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      github-actions:
+        patterns: ["*"]
