@@ -4,7 +4,7 @@ BUILD_DIR  := dist
 BIN        := $(BUILD_DIR)/$(BINARY)
 
 .PHONY: build run test lint tidy clean setup-pre-commit pre-commit changelog \
-        release-dry-run release-build help
+        gen-schema check-schema release-dry-run release-build help
 
 build: ## Build the vigie binary into dist/
 	go build -o $(BIN) $(CMD)
@@ -32,6 +32,13 @@ pre-commit: ## Run all pre-commit hooks against every file
 
 changelog: ## Generate a changelog from git history
 	git cliff --output CHANGELOG.md
+
+gen-schema: ## Regenerate pkg/api/schema/v1/testfile.json from internal/dsl types
+	go generate ./pkg/api/schema/v1/...
+
+check-schema: ## Fail if testfile.json is out of sync with `go generate`
+	go generate ./pkg/api/schema/v1/...
+	git diff --exit-code pkg/api/schema/v1/testfile.json
 
 release-dry-run: ## Preview a release locally (requires goreleaser in PATH)
 	goreleaser release --snapshot --clean

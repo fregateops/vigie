@@ -1,0 +1,1215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.vigie.io/v1/test.json",
+  "$defs": {
+    "AppliesSpec": {
+      "properties": {},
+      "additionalProperties": false,
+      "type": "object",
+      "maxProperties": 0,
+      "description": "AppliesSpec is used by the applies matcher."
+    },
+    "Assertion": {
+      "properties": {
+        "not": {
+          "type": "boolean",
+          "description": "Negate this assertion — a passing matcher fails and vice versa."
+        },
+        "on": {
+          "$ref": "#/$defs/TargetSpec",
+          "description": "Per-assertion document selector; overrides the test-level target: for this assertion only."
+        },
+        "equal": {
+          "$ref": "#/$defs/PathValue",
+          "description": "Asserts the value at path deep-equals value (int/float normalized for YAML). All tiers."
+        },
+        "notEqual": {
+          "$ref": "#/$defs/PathValue",
+          "description": "Asserts the value at path is not deep-equal to value. A missing path passes. All tiers."
+        },
+        "greaterThan": {
+          "$ref": "#/$defs/PathValue",
+          "description": "Asserts the numeric value at path is strictly greater than value. All tiers."
+        },
+        "lessThan": {
+          "$ref": "#/$defs/PathValue",
+          "description": "Asserts the numeric value at path is strictly less than value. All tiers."
+        },
+        "gte": {
+          "$ref": "#/$defs/PathValue",
+          "description": "Asserts the numeric value at path is greater than or equal to value. All tiers."
+        },
+        "lte": {
+          "$ref": "#/$defs/PathValue",
+          "description": "Asserts the numeric value at path is less than or equal to value. All tiers."
+        },
+        "contains": {
+          "$ref": "#/$defs/PathContent",
+          "description": "Asserts the string at path contains the substring content, or the list at path contains the item. All tiers."
+        },
+        "notContains": {
+          "$ref": "#/$defs/PathContent",
+          "description": "Asserts the string/list at path does not contain content. All tiers."
+        },
+        "startsWith": {
+          "$ref": "#/$defs/PathValue",
+          "description": "Asserts the string at path starts with value. All tiers."
+        },
+        "endsWith": {
+          "$ref": "#/$defs/PathValue",
+          "description": "Asserts the string at path ends with value. All tiers."
+        },
+        "matchRegex": {
+          "$ref": "#/$defs/PathPattern",
+          "description": "Asserts the string at path matches the RE2 regular expression pattern. All tiers."
+        },
+        "notMatchRegex": {
+          "$ref": "#/$defs/PathPattern",
+          "description": "Asserts the string at path does not match the RE2 regular expression pattern. All tiers."
+        },
+        "matchTemplate": {
+          "$ref": "#/$defs/PathPattern",
+          "description": "Asserts the string at path matches a template pattern where ${VAR} placeholders match any text. All tiers."
+        },
+        "exists": {
+          "$ref": "#/$defs/PathOnly",
+          "description": "Asserts path is present (any value, including null). All tiers."
+        },
+        "notExists": {
+          "$ref": "#/$defs/PathOnly",
+          "description": "Asserts path is absent. All tiers."
+        },
+        "isNull": {
+          "$ref": "#/$defs/PathOnly",
+          "description": "Asserts the value at path is null. All tiers."
+        },
+        "isNotNull": {
+          "$ref": "#/$defs/PathOnly",
+          "description": "Asserts the value at path is not null. All tiers."
+        },
+        "isEmpty": {
+          "$ref": "#/$defs/PathOnly",
+          "description": "Asserts the value at path is empty (empty string, list, map, or null). All tiers."
+        },
+        "isNotEmpty": {
+          "$ref": "#/$defs/PathOnly",
+          "description": "Asserts the value at path is not empty. All tiers."
+        },
+        "isKind": {
+          "type": "string",
+          "description": "Asserts the selected document's kind field equals this value. All tiers."
+        },
+        "isAPIVersion": {
+          "type": "string",
+          "description": "Asserts the selected document's apiVersion field equals this value. All tiers."
+        },
+        "hasDocuments": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Asserts the render produced exactly this many YAML documents. All tiers."
+        },
+        "failedTemplate": {
+          "$ref": "#/$defs/FailedTemplateSpec",
+          "description": "Asserts the render itself failed; optionally that the error matches errorPattern. All tiers."
+        },
+        "allOf": {
+          "items": {
+            "$ref": "#/$defs/Assertion"
+          },
+          "type": "array",
+          "description": "Passes when every child assertion passes. Supported tiers are the intersection of the children's tiers."
+        },
+        "anyOf": {
+          "items": {
+            "$ref": "#/$defs/Assertion"
+          },
+          "type": "array",
+          "description": "Passes when at least one child assertion passes. Supported tiers are the intersection of the children's tiers."
+        },
+        "isType": {
+          "$ref": "#/$defs/IsTypeSpec",
+          "description": "Asserts the value at path is of type of. All tiers."
+        },
+        "lengthEqual": {
+          "$ref": "#/$defs/LengthEqualSpec",
+          "description": "Asserts the collection at path has exactly value elements. All tiers."
+        },
+        "isSubset": {
+          "$ref": "#/$defs/PathContent",
+          "description": "Asserts the map at path contains every key/value pair in content (deep-equal per key). All tiers."
+        },
+        "matchSnapshot": {
+          "$ref": "#/$defs/MatchSnapshotSpec",
+          "description": "Asserts the document matches the stored snapshot; writes on first run or with --update-snapshots. All tiers."
+        },
+        "matchSchema": {
+          "$ref": "#/$defs/MatchSchemaSpec",
+          "description": "Asserts the value at path validates against an inline JSON Schema (draft 2020-12) fragment. All tiers."
+        },
+        "expr": {
+          "type": "string",
+          "description": "CEL expression that must evaluate to true. Bindings: resources, doc, release, values, matrix, case, output (helper tests). All tiers."
+        },
+        "applies": {
+          "$ref": "#/$defs/AppliesSpec",
+          "description": "Asserts the resource is accepted by the API server (admission, schema, RBAC, immutability). Apply tiers only (test-apply api/simulated/e2e)."
+        },
+        "rejected": {
+          "$ref": "#/$defs/RejectedSpec",
+          "description": "Asserts the resource is rejected by the API server, optionally matching reason/message. Apply tiers only (test-apply api/simulated/e2e)."
+        },
+        "waitFor": {
+          "$ref": "#/$defs/WaitForSpec",
+          "description": "Polls until the resource reports the given status condition. Apply tiers simulated and e2e only."
+        },
+        "becomesReady": {
+          "$ref": "#/$defs/WaitForSpec",
+          "description": "Polls until the resource is Ready (readiness inferred per kind). Apply tiers simulated and e2e only."
+        },
+        "http": {
+          "$ref": "#/$defs/HTTPAssert",
+          "description": "Sends an HTTP request to a target in the cluster and asserts on the response. e2e tier only."
+        },
+        "lookup": {
+          "$ref": "#/$defs/LookupAssert",
+          "description": "Fetches a live resource and runs nested assertions on it. Apply tiers simulated and e2e only."
+        },
+        "logsContain": {
+          "$ref": "#/$defs/LogsAssert",
+          "description": "Asserts a pod's logs contain a substring or /regex/ within a timeout. e2e tier only."
+        },
+        "eventEmitted": {
+          "$ref": "#/$defs/EventAssert",
+          "description": "Asserts a Kubernetes Event with the given reason/type was emitted for the involved object. Apply tiers simulated and e2e only."
+        },
+        "notRendered": {
+          "$ref": "#/$defs/NotRenderedSpec",
+          "description": "Planned (not yet implemented): asserts a specific template produced no output. See DESIGN.md §8."
+        },
+        "metricEquals": {
+          "$ref": "#/$defs/MetricEqualsSpec",
+          "description": "Planned (not yet implemented): asserts a Prometheus-format metric on a target endpoint matches an expected value. See DESIGN.md §8."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "Assertion is a single assertion within a test."
+    },
+    "CapabilityInputs": {
+      "properties": {
+        "kubeVersion": {
+          "type": "string",
+          "description": "Kubernetes version string (e.g. \"1.29.0\")."
+        },
+        "apiVersions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Additional API versions reported as available."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "CapabilityInputs overrides Kubernetes API capabilities visible to templates."
+    },
+    "ChartSpec": {
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Path to the chart relative to the test file."
+        },
+        "dependencies": {
+          "type": "string",
+          "enum": [
+            "build",
+            "update",
+            "skip"
+          ],
+          "description": "How to resolve chart dependencies before rendering."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ChartSpec optionally overrides the chart used by a suite."
+    },
+    "ClusterSpec": {
+      "properties": {
+        "backend": {
+          "type": "string",
+          "enum": [
+            "kind",
+            "k3d",
+            "kubeconfig",
+            "envtest",
+            "simulated"
+          ],
+          "description": "Cluster backend name."
+        },
+        "kubeVersion": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$",
+          "description": "Kubernetes version string (semver)."
+        },
+        "nodes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of nodes to provision (where supported)."
+        },
+        "kubeconfig": {
+          "type": "string",
+          "description": "Path to an external kubeconfig (for the kubeconfig backend)."
+        },
+        "kwok": {
+          "$ref": "#/$defs/KwokSpec",
+          "description": "Optional kwok node simulator configuration."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ClusterSpec selects the cluster backend used by live tiers."
+    },
+    "Dependency": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Unique dependency name."
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Namespace to install the dependency into."
+        },
+        "source": {
+          "$ref": "#/$defs/DependencySource",
+          "description": "Where the dependency comes from (helm chart, manifest, kustomize, secret, or ref)."
+        },
+        "values": {
+          "type": "object",
+          "description": "Values to pass when installing the dependency."
+        },
+        "waitFor": {
+          "items": {
+            "$ref": "#/$defs/WaitForSpec"
+          },
+          "type": "array",
+          "description": "Conditions that must hold before the dependency is considered ready."
+        },
+        "exports": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object",
+          "description": "Map of export names to fields on the dependency (for downstream use)."
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "suite",
+            "test",
+            "cluster"
+          ],
+          "description": "Lifetime of the dependency: suite (default), test, or cluster."
+        },
+        "dependsOn": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Names of other dependencies that must be installed first."
+        },
+        "onFail": {
+          "type": "string",
+          "enum": [
+            "clean",
+            "keep"
+          ],
+          "description": "What to do on failure: clean (default) or keep the partial state."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "name",
+        "source"
+      ],
+      "description": "Dependency declares a resource that must be installed before tests run."
+    },
+    "DependencySource": {
+      "properties": {
+        "helm": {
+          "$ref": "#/$defs/HelmSource",
+          "description": "Install a Helm chart from a repo."
+        },
+        "manifest": {
+          "type": "string",
+          "description": "Apply a path/glob of raw Kubernetes manifests."
+        },
+        "kustomize": {
+          "type": "string",
+          "description": "Apply a kustomize directory."
+        },
+        "secret": {
+          "$ref": "#/$defs/SecretSource",
+          "description": "Resolve and create a Kubernetes Secret."
+        },
+        "ref": {
+          "type": "string",
+          "description": "Reference another dependency by name."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "DependencySource is the union of supported dependency source types."
+    },
+    "EventAssert": {
+      "properties": {
+        "involvedObject": {
+          "$ref": "#/$defs/EventObjectRef",
+          "description": "Filters events by their involvedObject. Empty fields match any."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Expected event reason (e.g. Scheduled, Pulled). Empty matches any."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "Normal",
+            "Warning"
+          ],
+          "description": "Expected event type. Empty matches any."
+        },
+        "within": {
+          "type": "string",
+          "description": "Max time to poll for the event as a Go duration (e.g. 30s). Default 2m."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "EventAssert asserts a Kubernetes Event was emitted for the involved object."
+    },
+    "EventObjectRef": {
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Object kind."
+        },
+        "name": {
+          "type": "string",
+          "description": "Object name."
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Object namespace."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "EventObjectRef filters events by their involvedObject."
+    },
+    "FailedTemplateSpec": {
+      "properties": {
+        "errorPattern": {
+          "type": "string",
+          "description": "Optional RE2 regex the render error message must match."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "FailedTemplateSpec is used by the failedTemplate matcher."
+    },
+    "HTTPAssert": {
+      "properties": {
+        "via": {
+          "type": "string",
+          "enum": [
+            "portforward",
+            "ingress",
+            "nodeport",
+            "direct"
+          ],
+          "description": "Routing mode to reach the target. Default: portforward."
+        },
+        "target": {
+          "$ref": "#/$defs/HTTPTarget",
+          "description": "The Kubernetes resource to reach (Service, Ingress, etc.)."
+        },
+        "method": {
+          "type": "string",
+          "description": "HTTP method. Default: GET."
+        },
+        "path": {
+          "type": "string",
+          "description": "Request path appended to the resolved target URL."
+        },
+        "host": {
+          "type": "string",
+          "description": "Host header to send (e.g. for ingress routing)."
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object",
+          "description": "Request headers."
+        },
+        "body": {
+          "description": "Request body; serialized to JSON when not a string."
+        },
+        "timeout": {
+          "type": "string",
+          "description": "Per-attempt timeout as a Go duration (e.g. 30s). Default 30s."
+        },
+        "retries": {
+          "$ref": "#/$defs/HTTPRetries",
+          "description": "Retry policy for the request."
+        },
+        "assert": {
+          "$ref": "#/$defs/HTTPAssertBlock",
+          "description": "Conditions the response must satisfy."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "HTTPAssert sends an HTTP request to a cluster target and asserts on the response."
+    },
+    "HTTPAssertBlock": {
+      "properties": {
+        "status": {
+          "type": "integer",
+          "description": "Expected HTTP status code."
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object",
+          "description": "Expected response headers; a value wrapped in /.../ is matched as a regex."
+        },
+        "body": {
+          "description": "Expected response body (used by some helpers)."
+        },
+        "bodyContains": {
+          "type": "string",
+          "description": "Substring the response body must contain."
+        },
+        "jsonPath": {
+          "type": "object",
+          "description": "Map of $.json.path expressions to expected values (compared as strings)."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "HTTPAssertBlock is the set of response conditions an HTTP assertion checks."
+    },
+    "HTTPRetries": {
+      "properties": {
+        "count": {
+          "type": "integer",
+          "description": "Maximum number of retries."
+        },
+        "interval": {
+          "type": "string",
+          "description": "Delay between retries as a Go duration. Default 1s."
+        },
+        "until": {
+          "type": "string",
+          "description": "CEL expression over status/body/headers; retries until it is true."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "HTTPRetries is the retry policy for an HTTP assertion."
+    },
+    "HTTPTarget": {
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Target resource kind."
+        },
+        "name": {
+          "type": "string",
+          "description": "Target resource name."
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Target resource namespace."
+        },
+        "port": {
+          "type": "integer",
+          "description": "Target port number."
+        },
+        "url": {
+          "type": "string",
+          "description": "Direct URL (only with via: direct)."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "HTTPTarget identifies the Kubernetes resource to reach (Service, Ingress, etc.)."
+    },
+    "HelmSource": {
+      "properties": {
+        "chart": {
+          "type": "string",
+          "description": "Chart name or local path."
+        },
+        "repo": {
+          "type": "string",
+          "description": "Chart repository URL."
+        },
+        "version": {
+          "type": "string",
+          "description": "Chart version constraint."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "chart"
+      ],
+      "description": "HelmSource installs a Helm chart from a repo or local path."
+    },
+    "Inputs": {
+      "properties": {
+        "set": {
+          "type": "object",
+          "description": "Helm --set overrides (dotted key paths to scalar values)."
+        },
+        "setJson": {
+          "type": "object",
+          "description": "Helm --set-json overrides (dotted key paths to JSON-encoded values)."
+        },
+        "setLiteral": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object",
+          "description": "Helm --set-literal overrides (dotted key paths to literal string values)."
+        },
+        "values": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Extra values files to merge, relative to the chart root."
+        },
+        "release": {
+          "$ref": "#/$defs/ReleaseInputs",
+          "description": "Release metadata overrides."
+        },
+        "capabilities": {
+          "$ref": "#/$defs/CapabilityInputs",
+          "description": "Kubernetes API capabilities overrides."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "Inputs is the set of value overrides and release/capabilities settings."
+    },
+    "IsTypeSpec": {
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Dotted/bracketed path into the selected document or parsed helper output."
+        },
+        "of": {
+          "type": "string",
+          "enum": [
+            "string",
+            "int",
+            "float",
+            "bool",
+            "list",
+            "map"
+          ],
+          "description": "Expected type name. Whole-number floats are accepted as int."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "IsTypeSpec is used by the isType matcher."
+    },
+    "KwokSpec": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether to enable kwok."
+        },
+        "nodeCount": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of kwok nodes to provision."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "KwokSpec configures the kwok node simulator."
+    },
+    "LengthEqualSpec": {
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Dotted/bracketed path into the selected document or parsed helper output."
+        },
+        "value": {
+          "type": "integer",
+          "description": "Expected length."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "LengthEqualSpec is used by the lengthEqual matcher."
+    },
+    "LogsAssert": {
+      "properties": {
+        "pod": {
+          "$ref": "#/$defs/LogsPodSelector",
+          "description": "Selects the pod(s) whose logs are scanned."
+        },
+        "container": {
+          "type": "string",
+          "description": "Container name to read logs from; defaults to the pod's first container."
+        },
+        "pattern": {
+          "type": "string",
+          "description": "Substring to find, or /regex/ when wrapped in slashes."
+        },
+        "within": {
+          "type": "string",
+          "description": "Max time to stream logs as a Go duration (e.g. 30s). Default 30s."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "pod",
+        "pattern"
+      ],
+      "description": "LogsAssert asserts a pod's logs contain a pattern within a timeout."
+    },
+    "LogsPodSelector": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Pod name. Use this or labelSelector."
+        },
+        "labelSelector": {
+          "type": "string",
+          "description": "Label selector matching one or more pods."
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Namespace of the pod(s). Defaults to the test's per-test namespace."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "LogsPodSelector selects the pod(s) whose logs are scanned."
+    },
+    "LookupAssert": {
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Resource kind to fetch (e.g. Deployment, Service)."
+        },
+        "name": {
+          "type": "string",
+          "description": "Resource name for a single get. Use this or labelSelector."
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Namespace to look in. Defaults to the test's per-test namespace."
+        },
+        "labelSelector": {
+          "type": "string",
+          "description": "Label selector for a list lookup; pair with forEach to assert per item."
+        },
+        "within": {
+          "type": "string",
+          "description": "Max time to poll for the resource as a Go duration (e.g. 30s). Default 2m."
+        },
+        "until": {
+          "$ref": "#/$defs/PathValue",
+          "description": "Path/value condition that must hold before the then assertions run."
+        },
+        "then": {
+          "items": {
+            "$ref": "#/$defs/Assertion"
+          },
+          "type": "array",
+          "description": "Assertions run against the single fetched resource."
+        },
+        "forEach": {
+          "items": {
+            "$ref": "#/$defs/Assertion"
+          },
+          "type": "array",
+          "description": "Assertions run against each resource matched by labelSelector."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "description": "LookupAssert fetches a live resource and runs nested assertions on it."
+    },
+    "MatchSchemaSpec": {
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Dotted/bracketed path into the selected document or parsed helper output."
+        },
+        "schema": {
+          "type": "object",
+          "description": "Inline JSON Schema fragment the value must satisfy."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "MatchSchemaSpec is used by the matchSchema matcher."
+    },
+    "MatchSnapshotSpec": {
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Optional dotted/bracketed path to snapshot; omit to snapshot the whole document/helper output."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "MatchSnapshotSpec is used by the matchSnapshot matcher."
+    },
+    "MetricEqualsSpec": {
+      "properties": {},
+      "additionalProperties": false,
+      "type": "object",
+      "description": "MetricEqualsSpec is the spec for the metricEquals planned matcher."
+    },
+    "NotRenderedSpec": {
+      "properties": {
+        "template": {
+          "type": "string",
+          "description": "Template path that should produce no output."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "NotRenderedSpec is the spec for the notRendered planned matcher."
+    },
+    "PathContent": {
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Dotted/bracketed path into the rendered document or parsed helper output. Omit in helper tests to target the whole output."
+        },
+        "content": {
+          "description": "Substring, list item, or sub-map to test for, depending on the matcher."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "PathContent is a dotted/bracketed path plus content to look for."
+    },
+    "PathOnly": {
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Dotted/bracketed path into the rendered document or parsed helper output. Omit in helper tests to target the whole output."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "PathOnly is a bare dotted/bracketed path with no comparison value."
+    },
+    "PathPattern": {
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Dotted/bracketed path into the rendered document or parsed helper output. Omit in helper tests to target the whole output."
+        },
+        "pattern": {
+          "type": "string",
+          "description": "RE2 regular expression (matchRegex/notMatchRegex) or template with ${VAR} placeholders (matchTemplate)."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "PathPattern is a dotted/bracketed path plus a pattern."
+    },
+    "PathValue": {
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Dotted/bracketed path into the rendered document or parsed helper output. Omit in helper tests to target the whole output."
+        },
+        "value": {
+          "description": "Expected value to compare against."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "PathValue is a dotted/bracketed path plus an expected value."
+    },
+    "RejectedSpec": {
+      "properties": {
+        "reason": {
+          "type": "string",
+          "description": "Expected API error reason (e.g. \"Invalid\", \"Forbidden\")."
+        },
+        "message": {
+          "type": "string",
+          "description": "Regex matched against the error message."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "RejectedSpec is used by the rejected matcher."
+    },
+    "ReleaseInputs": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Release name passed to Helm."
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Release namespace passed to Helm."
+        },
+        "revision": {
+          "type": "integer",
+          "description": "Release revision number."
+        },
+        "isInstall": {
+          "type": "boolean",
+          "description": "Whether to treat this as an install."
+        },
+        "isUpgrade": {
+          "type": "boolean",
+          "description": "Whether to treat this as an upgrade."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ReleaseInputs overrides Helm release metadata."
+    },
+    "SecretKeySpec": {
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "Secret data key name."
+        },
+        "env": {
+          "type": "string",
+          "description": "Environment variable to source the value from."
+        },
+        "file": {
+          "type": "string",
+          "description": "File path to source the value from."
+        },
+        "generate": {
+          "$ref": "#/$defs/ShellCommand",
+          "description": "Shell command that produces the value on stdout."
+        },
+        "fallback": {
+          "$ref": "#/$defs/SecretKeySpec",
+          "description": "Fallback source if the primary cannot be resolved."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "SecretKeySpec describes how to populate a single Secret data key."
+    },
+    "SecretSource": {
+      "properties": {
+        "keys": {
+          "items": {
+            "$ref": "#/$defs/SecretKeySpec"
+          },
+          "type": "array",
+          "minItems": 1,
+          "description": "Non-empty list of Secret data keys to populate."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "keys"
+      ],
+      "description": "SecretSource defines how to resolve and inject a K8s Secret."
+    },
+    "ShellCommand": {
+      "properties": {
+        "run": {
+          "type": "string",
+          "description": "Shell command to execute."
+        },
+        "shell": {
+          "type": "string",
+          "description": "Shell binary (default: sh)."
+        },
+        "dir": {
+          "type": "string",
+          "description": "Working directory."
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object",
+          "description": "Environment variables to set."
+        },
+        "timeout": {
+          "type": "string",
+          "description": "Maximum time to allow the command to run, as a Go duration."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "run"
+      ],
+      "description": "ShellCommand is shared by generate: in secret sources, LifecycleHook, and script: source (M5)."
+    },
+    "TargetSpec": {
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Kubernetes resource kind to select."
+        },
+        "name": {
+          "type": "string",
+          "description": "Resource name to select."
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Resource namespace to select."
+        },
+        "apiVersion": {
+          "type": "string",
+          "description": "API version to select."
+        },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object",
+          "description": "Label selector to select resources."
+        },
+        "documentIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Zero-based index of the document to select when multiple documents match."
+        },
+        "expr": {
+          "type": "string",
+          "description": "CEL expression returning bool over each document."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "TargetSpec selects which rendered document(s) the asserts apply to."
+    },
+    "Test": {
+      "properties": {
+        "it": {
+          "type": "string",
+          "description": "Human-readable description of the scenario."
+        },
+        "tier": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Tiers this test applies to. Default: [template, validate]."
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Arbitrary labels for filtering tests."
+        },
+        "skip": {
+          "description": "Skip condition — boolean or CEL expression string."
+        },
+        "inputs": {
+          "$ref": "#/$defs/Inputs",
+          "description": "Value overrides and release/capabilities settings for this test."
+        },
+        "matrix": {
+          "type": "object",
+          "description": "Cartesian product across declared dimensions. Reserved keys 'exclude' and 'include' filter combinations."
+        },
+        "cases": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array",
+          "description": "Explicit list of named parameter sets; no cartesian expansion."
+        },
+        "forEach": {
+          "type": "boolean",
+          "description": "When true, runs one test per rendered document instead of one test for all documents."
+        },
+        "call": {
+          "type": "string",
+          "description": "Named template (define block) to invoke. Mutually exclusive with target:. Activates helper test mode."
+        },
+        "args": {
+          "type": "object",
+          "description": "Dict passed to the named template. Values are YAML literals or ${{ CEL }} expressions."
+        },
+        "outputAs": {
+          "type": "string",
+          "enum": [
+            "string",
+            "yaml",
+            "json",
+            "bool"
+          ],
+          "description": "How to interpret the helper's rendered output. Default: string.\nyaml/json enable path-based matchers on the parsed structure. bool treats non-empty output as true."
+        },
+        "target": {
+          "$ref": "#/$defs/TargetSpec",
+          "description": "Selects which rendered document(s) the asserts apply to."
+        },
+        "asserts": {
+          "items": {
+            "$ref": "#/$defs/Assertion"
+          },
+          "type": "array",
+          "description": "Assertions to evaluate."
+        },
+        "setup": {
+          "items": {
+            "$ref": "#/$defs/ShellCommand"
+          },
+          "type": "array",
+          "description": "Lifecycle hooks run before this test."
+        },
+        "teardown": {
+          "items": {
+            "$ref": "#/$defs/ShellCommand"
+          },
+          "type": "array",
+          "description": "Lifecycle hooks run after this test."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "it"
+      ],
+      "description": "Test is a single test case."
+    },
+    "WaitForSpec": {
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Resource kind to poll (e.g. Deployment, Pod, StatefulSet)."
+        },
+        "name": {
+          "type": "string",
+          "description": "Resource name. Provide this or labelSelector."
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Namespace to poll in. Defaults to the test's per-test namespace."
+        },
+        "labelSelector": {
+          "type": "string",
+          "description": "Label selector identifying the resource(s) to poll. Provide this or name."
+        },
+        "condition": {
+          "type": "string",
+          "description": "status.conditions[] type that must become True (e.g. Available, Ready).\nFor becomesReady this is inferred from the kind."
+        },
+        "timeout": {
+          "type": "string",
+          "pattern": "^[0-9]+(ns|us|ms|s|m|h)$",
+          "description": "Maximum time to poll before failing, as a Go duration (e.g. 30s, 2m). Default 2m."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "description": "WaitForSpec polls a resource until a status condition is met."
+    }
+  },
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional $schema URI for IDE validation."
+    },
+    "suite": {
+      "type": "string",
+      "description": "Human-readable name for this test file."
+    },
+    "templates": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array",
+      "description": "Unit-tier only (vigie test). Limits rendering to these templates (paths relative to chart root);\nif omitted, all templates render. In apply-tier suites (test-apply api|simulated|e2e) this is ignored —\nuse target: per test to scope matchers instead."
+    },
+    "helpers": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array",
+      "description": "Template files loaded for their define blocks only — no manifests are rendered.\nUsed for helper function tests (call:). Paths relative to chart root."
+    },
+    "chart": {
+      "$ref": "#/$defs/ChartSpec",
+      "description": "Optional chart override for this suite."
+    },
+    "cluster": {
+      "$ref": "#/$defs/ClusterSpec",
+      "description": "Cluster backend for live tiers (apiserver/simulated/e2e)."
+    },
+    "defaults": {
+      "$ref": "#/$defs/Inputs",
+      "description": "Default inputs applied to every test in this suite."
+    },
+    "dependencies": {
+      "items": {
+        "$ref": "#/$defs/Dependency"
+      },
+      "type": "array",
+      "description": "Resources to install before tests run."
+    },
+    "beforeAll": {
+      "items": {
+        "$ref": "#/$defs/ShellCommand"
+      },
+      "type": "array",
+      "description": "Lifecycle hooks run once before all tests."
+    },
+    "afterAll": {
+      "items": {
+        "$ref": "#/$defs/ShellCommand"
+      },
+      "type": "array",
+      "description": "Lifecycle hooks run once after all tests."
+    },
+    "tests": {
+      "items": {
+        "$ref": "#/$defs/Test"
+      },
+      "type": "array",
+      "description": "The list of test cases in this suite."
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "suite",
+    "tests"
+  ],
+  "title": "Vigie test file",
+  "description": "Suite is the top-level structure of a test file."
+}
