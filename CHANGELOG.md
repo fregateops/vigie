@@ -10,6 +10,7 @@ All notable changes to this project are documented in this file.
 ### Bug fixes
 
 - *(release)* Ignore transient release_notes.md
+- *(release)* Make goreleaser replace GH release body
 
 ### Documentation
 
