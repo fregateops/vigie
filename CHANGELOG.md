@@ -1,6 +1,27 @@
 # Changelog
 
 All notable changes to this project are documented in this file.
+## [0.2.0] - 2026-08-08
+
+### Features
+
+- *(cel)* Wrap CEL evaluator from cel-go
+- *(render)* Add helm chart rendering using helm v3 engine
+- *(lint)* Add lint types and base runner
+- *(lint)* Add linter rule engine and rules dataset
+- *(lint)* Add rules loader
+- *(lint)* Add helm3 linter adapter
+- *(report)* Add lint result reporter with CI detection
+- *(lint)* Wire vigie lint command
+
+### Refactor
+
+- *(lint)* Cleanup executor test
+
+### Testing
+
+- *(lint)* Add lint command tests with testdata charts
+
 ## [0.1.0] - 2026-08-08
 
 ### Features
