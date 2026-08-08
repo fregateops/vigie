@@ -3,7 +3,7 @@ CMD        := ./cmd/vigie
 BUILD_DIR  := dist
 BIN        := $(BUILD_DIR)/$(BINARY)
 
-.PHONY: build run test lint tidy clean setup-pre-commit pre-commit \
+.PHONY: build run test lint tidy clean setup-pre-commit pre-commit changelog \
         release-dry-run release-build help
 
 build: ## Build the vigie binary into dist/
@@ -29,6 +29,9 @@ setup-pre-commit: ## Install the git pre-commit hook
 
 pre-commit: ## Run all pre-commit hooks against every file
 	pre-commit run --all-files
+
+changelog: ## Generate a changelog from git history
+	git cliff --output CHANGELOG.md
 
 release-dry-run: ## Preview a release locally (requires goreleaser in PATH)
 	goreleaser release --snapshot --clean

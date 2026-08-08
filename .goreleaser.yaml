@@ -1,0 +1,62 @@
+version: 2
+
+project_name: vigie
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: vigie
+    main: ./cmd/vigie
+    binary: vigie
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/fregateops/vigie/internal/version.Version={{.Version}}
+      - -X github.com/fregateops/vigie/internal/version.Commit={{.Commit}}
+      - -X github.com/fregateops/vigie/internal/version.Date={{.Date}}
+
+upx:
+  - enabled: true
+    ids: [vigie]
+    # darwin excluded: UPX support for recent macOS is incomplete and Apple
+    # codesigning rejects packed binaries (see goreleaser UPX docs).
+    goos: [linux, windows]
+    compress: best
+    brute: false
+
+archives:
+  - id: vigie
+    name_template: "vigie_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+release:
+  github:
+    owner: fregateops
+    name: vigie
+  draft: false
+  prerelease: auto
+
+# Release notes come from git-cliff (--release-notes in the release workflow),
+# so goreleaser's own changelog generation is disabled to avoid a second source.
+changelog:
+  disable: true

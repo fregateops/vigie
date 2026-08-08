@@ -20,8 +20,10 @@
             go_1_26
             gnumake
             pre-commit
+            git-cliff
             # release tooling
             goreleaser
+            upx
           ];
 
           shellHook = ''
