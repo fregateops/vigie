@@ -1,0 +1,6 @@
+apiVersion: v2
+name: clean
+description: A minimal, lint-clean chart used as the passing fixture.
+version: 0.1.0
+appVersion: "1.0.0"
+icon: https://example.com/icon.png

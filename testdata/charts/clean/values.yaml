@@ -1,0 +1,4 @@
+replicaCount: 1
+image:
+  repository: myrepo/myapp
+  tag: "1.0.0"
