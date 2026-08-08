@@ -22,9 +22,14 @@ jobs:
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
-          args: --latest --strip all
-        env:
-          OUTPUT: release_notes.md
+          # Write the file via --output in args (the OUTPUT env var did not
+          # write it reliably); goreleaser reads it via --release-notes.
+          args: --latest --strip all --output release_notes.md
+
+      - name: Verify release notes are non-empty
+        run: |
+          test -s release_notes.md || { echo "::error::release_notes.md is empty — git-cliff produced no notes for this tag"; exit 1; }
+          echo "----- release_notes.md -----"; cat release_notes.md
 
       - uses: actions/setup-go@v7
         with:
