@@ -60,7 +60,3 @@ release:
   # via --release-notes. Also makes re-runs idempotent.
   mode: replace
 
-# Release notes come from git-cliff (--release-notes in the release workflow),
-# so goreleaser's own changelog generation is disabled to avoid a second source.
-changelog:
-  disable: true
