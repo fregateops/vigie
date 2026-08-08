@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/fregateops/vigie/internal/clog"
@@ -26,4 +27,10 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.Version = version.Version
 	rootCmd.PersistentFlags().CountVarP(&flagVerbose, "verbose", "v", "Increase verbosity: -v debug, -vv trace (logs go to stderr)")
+}
+
+// exitErr prints a formatted message to stderr and exits with code.
+func exitErr(code int, msg string, args ...any) {
+	fmt.Fprintf(os.Stderr, "vigie: "+msg+"\n", args...)
+	os.Exit(code)
 }
