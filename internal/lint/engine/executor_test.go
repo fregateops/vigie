@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/fregateops/vigie/internal/lint"
@@ -108,7 +109,7 @@ func TestRunRemovedAPIScope_VersionFilter(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("1.23: want 1 finding, got %d: %+v", len(got), got)
 	}
-	if got[0].Message == "" || !contains(got[0].Message, "Ingress") {
+	if got[0].Message == "" || !strings.Contains(got[0].Message, "Ingress") {
 		t.Errorf("1.23: expected Ingress finding, got %q", got[0].Message)
 	}
 
@@ -117,13 +118,4 @@ func TestRunRemovedAPIScope_VersionFilter(t *testing.T) {
 	if len(got) != 0 {
 		t.Errorf("1.20: want 0 findings, got %d", len(got))
 	}
-}
-
-func contains(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }
