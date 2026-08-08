@@ -55,6 +55,10 @@ release:
     name: vigie
   draft: false
   prerelease: auto
+  # Adopt a pre-existing release (e.g. created in the GitHub UI): upload the
+  # built artifacts to it and replace its body with the git-cliff notes passed
+  # via --release-notes. Also makes re-runs idempotent.
+  mode: replace
 
 # Release notes come from git-cliff (--release-notes in the release workflow),
 # so goreleaser's own changelog generation is disabled to avoid a second source.
