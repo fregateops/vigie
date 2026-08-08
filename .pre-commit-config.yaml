@@ -13,3 +13,10 @@ repos:
         entry: golangci-lint run
         pass_filenames: false
         files: \.go$
+
+      - id: check-schema
+        name: schema in sync with DSL types
+        entry: make check-schema
+        language: system
+        pass_filenames: false
+        files: \.go$

@@ -19,6 +19,9 @@ jobs:
       - name: go build
         run: go build ./...
 
+      - name: schema up to date
+        run: make check-schema
+
       - name: go test
         run: go test ./...
 
