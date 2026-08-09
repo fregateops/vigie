@@ -7,7 +7,9 @@ import (
 )
 
 // Get resolves a dotted/bracketed path expression against a document.
-// Returns (value, found, error). Supports: spec.replicas, containers[0].image
+// Returns (value, found, error). Supports dotted keys (spec.replicas), integer
+// indexing (containers[0].image), and quoted bracket keys for map keys that
+// contain dots or slashes (metadata.labels["app.kubernetes.io/name"]).
 func Get(doc any, expr string) (any, bool, error) {
 	if expr == "" || expr == "." {
 		return doc, true, nil
@@ -51,39 +53,64 @@ type segment struct {
 	index int // -1 means key lookup
 }
 
+// parse tokenises a path into segments. It scans character by character so that
+// quoted bracket keys (e.g. ["app.kubernetes.io/name"]) keep their dots and
+// slashes instead of being split on ".". Bare `.` separates keys; `[…]` holds
+// either an integer index or a quoted string key.
 func parse(expr string) ([]segment, error) {
 	var segments []segment
-	// Split on dots first, then handle [N] within each part.
-	parts := strings.Split(expr, ".")
-	for _, part := range parts {
-		if part == "" {
-			continue
+	var key strings.Builder
+	flushKey := func() {
+		if key.Len() > 0 {
+			segments = append(segments, segment{key: key.String(), index: -1})
+			key.Reset()
 		}
-		// Handle bracket notation: foo[0][1]
-		for {
-			ob := strings.IndexByte(part, '[')
-			if ob < 0 {
-				if part != "" {
-					segments = append(segments, segment{key: part, index: -1})
-				}
-				break
-			}
-			if ob > 0 {
-				segments = append(segments, segment{key: part[:ob], index: -1})
-			}
-			cb := strings.IndexByte(part, ']')
-			if cb < 0 {
+	}
+
+	for idx := 0; idx < len(expr); {
+		switch expr[idx] {
+		case '.':
+			flushKey()
+			idx++
+		case '[':
+			flushKey()
+			if idx+1 >= len(expr) {
 				return nil, fmt.Errorf("path: unmatched '[' in %q", expr)
 			}
-			idxStr := part[ob+1 : cb]
-			idx, err := strconv.Atoi(idxStr)
+			if quote := expr[idx+1]; quote == '"' || quote == '\'' {
+				end := strings.IndexByte(expr[idx+2:], quote)
+				if end < 0 {
+					return nil, fmt.Errorf("path: unterminated quoted key in %q", expr)
+				}
+				end += idx + 2
+				if end+1 >= len(expr) || expr[end+1] != ']' {
+					return nil, fmt.Errorf("path: expected ']' after quoted key in %q", expr)
+				}
+				segments = append(segments, segment{key: expr[idx+2 : end], index: -1})
+				idx = end + 2
+				continue
+			}
+			close := strings.IndexByte(expr[idx:], ']')
+			if close < 0 {
+				return nil, fmt.Errorf("path: unmatched '[' in %q", expr)
+			}
+			close += idx
+			idxStr := expr[idx+1 : close]
+			n, err := strconv.Atoi(strings.TrimSpace(idxStr))
 			if err != nil {
 				return nil, fmt.Errorf("path: non-integer index %q in %q", idxStr, expr)
 			}
-			segments = append(segments, segment{index: idx})
-			part = part[cb+1:]
+			if n < 0 {
+				return nil, fmt.Errorf("path: negative index %q in %q", idxStr, expr)
+			}
+			segments = append(segments, segment{index: n})
+			idx = close + 1
+		default:
+			key.WriteByte(expr[idx])
+			idx++
 		}
 	}
+	flushKey()
 	return segments, nil
 }
 

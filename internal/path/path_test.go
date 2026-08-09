@@ -50,3 +50,56 @@ func TestGet(t *testing.T) {
 		}
 	}
 }
+
+func TestGet_QuotedBracketKeys(t *testing.T) {
+	doc := map[string]any{
+		"metadata": map[string]any{
+			"labels": map[string]any{
+				"app.kubernetes.io/name":     "basic",
+				"app.kubernetes.io/instance": "release-name",
+			},
+		},
+		"data": map[string]any{
+			"config.yaml": "key: value",
+		},
+	}
+
+	tests := []struct {
+		name  string
+		expr  string
+		want  any
+		found bool
+	}{
+		{"double-quoted dotted/slash key", `metadata.labels["app.kubernetes.io/name"]`, "basic", true},
+		{"single-quoted dotted/slash key", `metadata.labels['app.kubernetes.io/instance']`, "release-name", true},
+		{"dotted key at leaf", `data["config.yaml"]`, "key: value", true},
+		{"missing quoted key", `metadata.labels["nope"]`, nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, found, err := Get(doc, tt.expr)
+			if err != nil {
+				t.Fatalf("Get(%q): %v", tt.expr, err)
+			}
+			if found != tt.found {
+				t.Fatalf("Get(%q): found=%v want %v", tt.expr, found, tt.found)
+			}
+			if found && got != tt.want {
+				t.Errorf("Get(%q) = %v, want %v", tt.expr, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParse_MalformedBrackets(t *testing.T) {
+	for _, expr := range []string{
+		`labels["unterminated`,
+		`containers[1`,
+		`containers[-1]`,
+		`labels["x"`,
+	} {
+		if _, _, err := Get(map[string]any{}, expr); err == nil {
+			t.Errorf("Get(%q): expected a parse error, got nil", expr)
+		}
+	}
+}
