@@ -23,8 +23,13 @@ var (
 var testCmd = &cobra.Command{
 	Use:   "test <chart>",
 	Short: "Render templates per test and run user assertions",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runTestCmd,
+	Example: `  # Run every tests/unit/*_test.yaml under the chart
+  vigie test ./mychart
+
+  # Run a single test file and emit JUnit for CI
+  vigie test ./mychart --file tests/unit/deployment_test.yaml -o junit`,
+	Args: cobra.ExactArgs(1),
+	RunE: runTestCmd,
 }
 
 func init() {

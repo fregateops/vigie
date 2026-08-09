@@ -22,8 +22,14 @@ var (
 var lintCmd = &cobra.Command{
 	Use:   "lint <chart>",
 	Short: "Static analysis: chart-yaml, deprecations, best-practices",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runLintCmd,
+	Example: `  # Lint a chart with all default rule sets
+  vigie lint ./mychart
+
+  # Run only best-practices and skip one rule, emitting JUnit
+  vigie lint ./mychart --rule-sets template-best-practices \
+    --disable-rules template-best-practices_missing-resource-limits -o junit`,
+	Args: cobra.ExactArgs(1),
+	RunE: runLintCmd,
 }
 
 func init() {
