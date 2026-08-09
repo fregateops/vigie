@@ -2,6 +2,7 @@ package runner
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/fregateops/vigie/internal/clog"
 	"github.com/fregateops/vigie/internal/dsl"
@@ -54,16 +55,20 @@ func evaluateAssertions(tr *TestResult, et expandedTest, suite *dsl.Suite, allDo
 
 	for assertIdx, assertion := range test.Asserts {
 		doc, diagMsg := selectDoc(assertion, test.Target, allDocs, renderErr)
+		// A non-empty diagnostic means document selection itself failed (no
+		// match / index out of range). Report it alone;
+		// running the matcher against a nil doc would only stack a redundant
+		// "no document selected" line on top.
+		if diagMsg != "" {
+			tr.Failures = append(tr.Failures, fmt.Sprintf("        → %s", strings.TrimSpace(diagMsg)))
+			continue
+		}
 		clog.Trace("evaluating assertion",
 			"suite", suite.SuiteName, "test", et.DisplayName,
 			"assertion", assertIdx, "matcher", matcherKind(assertion))
 		result := matchers.Evaluate(assertion, evalContext(doc, assertIdx))
 		if !result.Pass {
-			msg := fmt.Sprintf("        → %s", result.Message)
-			if diagMsg != "" {
-				msg += "\n" + diagMsg
-			}
-			tr.Failures = append(tr.Failures, msg)
+			tr.Failures = append(tr.Failures, fmt.Sprintf("        → %s", result.Message))
 		}
 	}
 }

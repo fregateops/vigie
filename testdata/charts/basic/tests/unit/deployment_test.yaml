@@ -18,8 +18,11 @@ tests:
       - isType:
           path: spec.replicas
           of: int
-      # Recommended-label keys contain dots, so they are addressed via CEL, not path:.
-      - expr: 'doc.metadata.labels["app.kubernetes.io/name"] == "basic"'
+      # Recommended-label keys contain dots — address them with a quoted
+      # bracket segment in path:, or via CEL in expr:. Both are shown here.
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: basic
       - expr: 'doc.metadata.labels["app.kubernetes.io/managed-by"] == "Helm"'
       - expr: 'doc.spec.selector.matchLabels["app.kubernetes.io/instance"] == "release-name"'
       - equal:

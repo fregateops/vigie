@@ -133,16 +133,25 @@ Two ways to parameterize a test:
       set:
         replicaCount: ${{ matrix.replicaCount }}
     asserts:
-      - equal: { path: spec.replicas, value: ${{ matrix.replicaCount }} }
+      - equal:
+          path: spec.replicas
+          value: ${{ matrix.replicaCount }}
 
   - it: builds the image reference per tag
     cases:
       - name: pinned
-        set: { image.tag: "2.0.0" }
+        set:
+          image.tag: "2.0.0"
         want: "myrepo/app:2.0.0"
     asserts:
-      - equal: { path: spec.template.spec.containers[0].image, value: ${{ case.want }} }
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ${{ case.want }}
 ```
+
+Use block style (as above) rather than YAML flow mappings for assertions: an
+unquoted index like `containers[0]` inside a `{ … }` flow mapping is parsed by
+YAML as a nested sequence and fails to load.
 
 `${{ ... }}` interpolates a CEL expression against the current `matrix`/`case` bindings.
 
@@ -174,8 +183,9 @@ Two ways to parameterize a test:
 Any matcher accepts `not: true` to invert the result.
 
 **Path syntax** is dotted with integer bracket indexing, e.g. `spec.template.spec.containers[0].image`.
-Map keys that contain dots (such as the `app.kubernetes.io/name` label) are not addressable
-via `path:` — use `expr:` instead, e.g. `doc.metadata.labels["app.kubernetes.io/name"] == "myapp"`.
+Map keys that contain dots or slashes (such as the `app.kubernetes.io/name` label) use a quoted
+bracket segment: `metadata.labels["app.kubernetes.io/name"]` (single or double quotes). The same
+keys are also reachable from `expr:` via CEL, e.g. `doc.metadata.labels["app.kubernetes.io/name"]`.
 
 ### Selecting a document
 
@@ -253,13 +263,15 @@ vigie test <chart>            template tier: render + assert (tests/unit/*_test.
   --file <path>               run a single test file instead of discovering all
   --tests <dir>               discovery root (default: <chart>/tests)
   --snapshot-dir <dir>        snapshot directory (default: <chart>/tests/snapshots)
+  --pass-on-warning           exit 0 on run warnings, e.g. no tests executed (default: exit 5)
 
 vigie schema                  print the test-file JSON Schema
 ```
 
 Global flags: `-o, --output pretty|junit` · `-p, --parallelism <n>` · `-v` debug / `-vv` trace.
 
-Exit codes: `0` pass · `1` test failure · `2` setup error · `3` user error · `4` infra error.
+Exit codes: `0` pass · `1` test failure · `2` setup error · `3` user error · `4` infra error ·
+`5` warnings (e.g. no tests executed; suppress with `--pass-on-warning`).
 
 ---
 

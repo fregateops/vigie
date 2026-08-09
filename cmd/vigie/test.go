@@ -13,10 +13,17 @@ import (
 )
 
 var (
-	flagTestFile        string
-	flagTestTestsDir    string
-	flagTestSnapshotDir string
+	flagTestFile          string
+	flagTestTestsDir      string
+	flagTestSnapshotDir   string
+	flagTestPassOnWarning bool
 )
+
+// exitWarnings is the exit code for a run that produced only warnings (e.g. no
+// tests executed) — distinct from setup (2)/user (3) errors so CI can tell
+// "your chart has no tests" apart from "the tool broke". Mirrors pytest's
+// dedicated "no tests collected" code.
+const exitWarnings = 5
 
 var testCmd = &cobra.Command{
 	Use:   "test <chart>",
@@ -34,6 +41,7 @@ func init() {
 	testCmd.Flags().StringVar(&flagTestFile, "file", "", "Run a specific test file instead of discovering all")
 	testCmd.Flags().StringVar(&flagTestTestsDir, "tests", "", "Directory to scan recursively for *_test.yaml (overrides test.testsDir; default: <chart>/tests)")
 	testCmd.Flags().StringVar(&flagTestSnapshotDir, "snapshot-dir", "", "Directory for snapshot files (default: <chart>/tests/snapshots)")
+	testCmd.Flags().BoolVar(&flagTestPassOnWarning, "pass-on-warning", false, "Exit 0 on run warnings such as no tests executed (default: exit 5)")
 	rootCmd.AddCommand(testCmd)
 }
 
@@ -60,33 +68,56 @@ func runTestCmd(cmd *cobra.Command, args []string) error {
 	}
 	slog.Debug("discovered test files", "count", len(files), "testsDir", testsDir)
 
+	// Warnings are non-fatal conditions that still shouldn't read as a green
+	// "0 tests" pass in CI (a typo'd path, an empty tests dir, or files with no
+	// tests). They fail the run (exit 5) by default; --pass-on-warning opts out.
+	var warnings []string
+
 	if len(files) == 0 {
-		fmt.Fprintf(os.Stderr, "vigie: no unit test files found under %s\n", displayTestsRoot(chartPath, testsDir))
-		os.Exit(0)
+		warnings = append(warnings, fmt.Sprintf("no unit test files found under %s", displayTestsRoot(chartPath, testsDir)))
+	} else {
+		opts := runner.Options{
+			ChartPath:   chartPath,
+			TestFiles:   files,
+			Parallelism: flagParallelism,
+			Cfg:         cfg,
+			SnapshotDir: flagTestSnapshotDir,
+		}
+
+		results, err := runner.Run(opts)
+		if err != nil {
+			exitErr(2, "%v", err)
+		}
+
+		rep := selectReporter(flagOutput, os.Stdout, cienv.Detect())
+		if err := rep.Report(results); err != nil {
+			exitErr(2, "reporting: %v", err)
+		}
+
+		if runner.AnyFailed(results) {
+			os.Exit(1)
+		}
+		if countTestCases(results) == 0 {
+			warnings = append(warnings, "test files were discovered but contained no tests")
+		}
 	}
 
-	opts := runner.Options{
-		ChartPath:   chartPath,
-		TestFiles:   files,
-		Parallelism: flagParallelism,
-		Cfg:         cfg,
-		SnapshotDir: flagTestSnapshotDir,
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "vigie: warning: %s\n", w)
 	}
-
-	results, err := runner.Run(opts)
-	if err != nil {
-		exitErr(2, "%v", err)
-	}
-
-	rep := selectReporter(flagOutput, os.Stdout, cienv.Detect())
-	if err := rep.Report(results); err != nil {
-		exitErr(2, "reporting: %v", err)
-	}
-
-	if runner.AnyFailed(results) {
-		os.Exit(1)
+	if len(warnings) > 0 && !flagTestPassOnWarning {
+		os.Exit(exitWarnings)
 	}
 	return nil
+}
+
+// countTestCases totals the executed test cases across all suites.
+func countTestCases(results []runner.SuiteResult) int {
+	total := 0
+	for _, sr := range results {
+		total += len(sr.Results)
+	}
+	return total
 }
 
 // resolveTestsDir picks the CLI --tests flag when set, else the config value.
