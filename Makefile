@@ -3,7 +3,9 @@ CMD        := ./cmd/vigie
 BUILD_DIR  := dist
 BIN        := $(BUILD_DIR)/$(BINARY)
 
-.PHONY: build run test lint tidy clean setup-pre-commit pre-commit changelog \
+CHART ?= ./testdata/charts/basic
+
+.PHONY: build run test smoke lint tidy clean setup-pre-commit pre-commit changelog \
         gen-schema check-schema release-dry-run release-build help
 
 build: ## Build the vigie binary into dist/
@@ -14,6 +16,10 @@ run: ## Run vigie from source (pass args via ARGS=...)
 
 test: pre-commit ## Run pre-commit hooks then the Go test suite
 	go test ./...
+
+smoke: build ## Cheap end-to-end check: lint + test the example chart (CHART=...)
+	$(BIN) lint $(CHART)
+	$(BIN) test $(CHART)
 
 lint: ## Run golangci-lint
 	golangci-lint run ./...
