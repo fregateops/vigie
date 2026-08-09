@@ -1,0 +1,4 @@
+apiVersion: v2
+name: test-failures
+description: Chart with a deliberately failing test, for the test-command failure path.
+version: 0.1.0

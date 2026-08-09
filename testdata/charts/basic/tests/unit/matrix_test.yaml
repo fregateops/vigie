@@ -1,0 +1,32 @@
+suite: matrix
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: honours the replica count
+    matrix:
+      replicaCount: [1, 5]
+    inputs:
+      set:
+        replicaCount: ${{ matrix.replicaCount }}
+    target:
+      kind: Deployment
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: ${{ matrix.replicaCount }}
+  - it: builds the image reference per tag
+    cases:
+      - name: pinned
+        set:
+          image.tag: "2.0.0"
+        want: "myrepo/app:2.0.0"
+      - name: floating
+        set:
+          image.tag: latest
+        want: "myrepo/app:latest"
+    target:
+      kind: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ${{ case.want }}

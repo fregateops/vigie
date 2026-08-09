@@ -1,0 +1,31 @@
+suite: autoscaling
+tests:
+  - it: renders an HPA and drops the Deployment replicas when enabled
+    inputs:
+      set:
+        autoscaling.enabled: true
+    asserts:
+      - hasDocuments: 4
+  - it: HPA targets the Deployment
+    inputs:
+      set:
+        autoscaling.enabled: true
+    target:
+      kind: HorizontalPodAutoscaler
+    asserts:
+      - isKind: HorizontalPodAutoscaler
+      - equal:
+          path: spec.maxReplicas
+          value: 5
+      - equal:
+          path: spec.scaleTargetRef.name
+          value: release-name-basic
+  - it: Deployment omits replicas under autoscaling
+    inputs:
+      set:
+        autoscaling.enabled: true
+    target:
+      kind: Deployment
+    asserts:
+      - notExists:
+          path: spec.replicas

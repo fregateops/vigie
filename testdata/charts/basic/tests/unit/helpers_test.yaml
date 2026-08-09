@@ -1,0 +1,21 @@
+suite: helpers
+helpers:
+  - templates/_helpers.tpl
+tests:
+  - it: basic.image builds a repository:tag reference
+    call: basic.image
+    args:
+      repository: myrepo/app
+      tag: "1.2.3"
+    asserts:
+      - equal:
+          value: "myrepo/app:1.2.3"
+      - matchRegex:
+          pattern: '^myrepo/app:1\.2\.3$'
+  - it: basic.image defaults the tag to latest
+    call: basic.image
+    args:
+      repository: myrepo/app
+    asserts:
+      - equal:
+          value: "myrepo/app:latest"

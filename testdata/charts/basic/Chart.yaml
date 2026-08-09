@@ -1,0 +1,11 @@
+apiVersion: v2
+name: basic
+description: A realistic application chart used to exercise the vigie matcher library.
+type: application
+version: 0.1.0
+appVersion: "1.2.3"
+keywords:
+  - example
+  - vigie
+maintainers:
+  - name: fregateops

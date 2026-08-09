@@ -1,0 +1,29 @@
+{{- if .Values.ingress.enabled -}}
+{{- $fullName := include "basic.fullname" . -}}
+{{- $svcPort := .Values.service.port -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "basic.labels" . | nindent 4 }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ $fullName }}
+                port:
+                  number: {{ $svcPort }}
+          {{- end }}
+    {{- end }}
+{{- end }}

@@ -1,0 +1,14 @@
+suite: failing
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: passes on the correct replica count
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+  - it: fails on a wrong replica count
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 99

@@ -1,0 +1,10 @@
+suite: snapshot
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: matches the rendered Deployment spec
+    target:
+      kind: Deployment
+    asserts:
+      - matchSnapshot:
+          path: spec
