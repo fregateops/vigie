@@ -1,0 +1,17 @@
+# Per-chart vigie configuration for the `basic` example chart.
+# Full reference: https://github.com/fregateops/vigie/blob/main/examples/.vigie.yaml
+
+defaults:
+  release:
+    name: release-name
+    namespace: default
+
+lint:
+  # This chart sets resource limits, so this rule never fires — shown here as
+  # an example of how to opt a rule out.
+  disableRules:
+    - template-best-practices_missing-resource-limits
+
+test:
+  # Unit tests live under tests/unit (also the default discovery root).
+  testsDir: tests/unit
