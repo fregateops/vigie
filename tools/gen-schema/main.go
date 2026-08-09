@@ -35,7 +35,9 @@ func run() error {
 	}
 
 	schema := reflector.Reflect(&dsl.Suite{})
-	schema.ID = "https://schemas.vigie.io/v1/test.json"
+	// $id must resolve so editors can fetch it via a `$schema=` modeline. Point
+	// it at the raw file on main, matching the file's actual path/name.
+	schema.ID = "https://raw.githubusercontent.com/fregateops/vigie/refs/heads/main/pkg/api/schema/v1/testfile.json"
 	schema.Title = "Vigie test file"
 
 	out, err := json.MarshalIndent(schema, "", "  ")
