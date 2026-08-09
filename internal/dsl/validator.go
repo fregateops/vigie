@@ -3,6 +3,7 @@ package dsl
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	schemav1 "github.com/fregateops/vigie/pkg/api/schema/v1"
@@ -51,11 +52,55 @@ func Validate(rawYAML []byte) error {
 		return nil
 	}
 
+	// DetailedErrors drills into the failing leaf and keys each message by its
+	// instance location (a JSON pointer like /tests/0/asserts/0/eqaul), so a
+	// mistyped matcher points at the exact offending key instead of a vague
+	// top-level "tests does not match" rollup.
+	detailed := result.DetailedErrors()
+	if len(detailed) > 0 {
+		locations := make([]string, 0, len(detailed))
+		for loc := range detailed {
+			locations = append(locations, loc)
+		}
+		sort.Strings(locations)
+		var msgs []string
+		for _, loc := range locations {
+			// Skip the structural rollup nodes ($ref/items/properties) that just
+			// say "does not match" — keep the concrete leaf violation (e.g. the
+			// additionalProperties error that names the offending key).
+			if isRollupLocation(loc) {
+				continue
+			}
+			where := loc
+			if where == "" {
+				where = "(root)"
+			}
+			msgs = append(msgs, fmt.Sprintf("%s: %s", where, detailed[loc]))
+		}
+		if len(msgs) > 0 {
+			return fmt.Errorf("schema validation errors:\n  %s", strings.Join(msgs, "\n  "))
+		}
+	}
+
+	// Fallback: the shallow, top-level errors if no leaf detail is available.
 	var msgs []string
 	for _, e := range result.Errors {
 		msgs = append(msgs, e.Error())
 	}
 	return fmt.Errorf("schema validation errors:\n  %s", strings.Join(msgs, "\n  "))
+}
+
+// isRollupLocation reports whether a JSON-pointer instance location ends in a
+// structural navigator keyword ($ref/items/properties). Those nodes carry only
+// generic "does not match" rollups; the actionable message lives at the leaf.
+func isRollupLocation(loc string) bool {
+	slash := strings.LastIndexByte(loc, '/')
+	last := loc[slash+1:]
+	switch last {
+	case "$ref", "items", "properties":
+		return true
+	}
+	return false
 }
 
 // normalizeForJSON ensures all map keys are strings, as required by JSON marshaling.
