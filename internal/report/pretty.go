@@ -5,19 +5,98 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/fregateops/vigie/internal/cienv"
 	"github.com/fregateops/vigie/internal/lint"
+	"github.com/fregateops/vigie/internal/runner"
 )
 
 var (
-	passColor = color.New(color.FgGreen, color.Bold)
-	failColor = color.New(color.FgRed, color.Bold)
-	nameColor = color.New(color.FgCyan)
-	warnColor = color.New(color.FgYellow, color.Bold)
-	infoColor = color.New(color.FgBlue)
+	passColor     = color.New(color.FgGreen, color.Bold)
+	failColor     = color.New(color.FgRed, color.Bold)
+	skipColor     = color.New(color.FgYellow)
+	nameColor     = color.New(color.FgCyan)
+	warnColor     = color.New(color.FgYellow, color.Bold)
+	infoColor     = color.New(color.FgBlue)
+	durationColor = color.New(color.Faint)
 )
+
+// formatDuration renders a duration compactly for the pretty reporter.
+func formatDuration(d time.Duration) string {
+	switch {
+	case d < time.Millisecond:
+		return fmt.Sprintf("%dµs", d.Microseconds())
+	case d < time.Second:
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	default:
+		return fmt.Sprintf("%.2fs", d.Seconds())
+	}
+}
+
+// Report writes test-suite results in a human-readable format.
+func (r *PrettyReporter) Report(results []runner.SuiteResult) error {
+	if r.CI != cienv.KindNone && os.Getenv("NO_COLOR") == "" {
+		color.NoColor = false
+	}
+
+	ciw := newCIWriter(r.CI, r.Out)
+	pass, fail, skip := 0, 0, 0
+	var totalTestTime time.Duration
+
+	for _, sr := range results {
+		suiteTitle := fmt.Sprintf("%s (%s)", sr.Suite, formatDuration(sr.Duration))
+		allPass := !runner.SuiteHasFailure(sr)
+		ciw.GroupStart(suiteTitle, allPass)
+
+		fmt.Fprintf(r.Out, "\n%s  %s\n", nameColor.Sprint(sr.Suite), durationColor.Sprintf("(%s)", formatDuration(sr.Duration)))
+		fmt.Fprintf(r.Out, "%s\n", strings.Repeat("─", 60))
+
+		for _, tr := range sr.Results {
+			totalTestTime += tr.Duration
+			timing := durationColor.Sprintf("(%s)", formatDuration(tr.Duration))
+			switch {
+			case tr.Skipped:
+				skip++
+				if tr.SkipReason != "" {
+					fmt.Fprintf(r.Out, "  %s  %s  %s  %s\n", skipColor.Sprint("SKIP"), tr.TestName, durationColor.Sprintf("(%s)", tr.SkipReason), timing)
+				} else {
+					fmt.Fprintf(r.Out, "  %s  %s  %s\n", skipColor.Sprint("SKIP"), tr.TestName, timing)
+				}
+			case tr.Pass:
+				pass++
+				fmt.Fprintf(r.Out, "  %s  %s  %s\n", passColor.Sprint("PASS"), tr.TestName, timing)
+			default:
+				fail++
+				fmt.Fprintf(r.Out, "  %s  %s  %s\n", failColor.Sprint("FAIL"), tr.TestName, timing)
+				for _, f := range tr.Failures {
+					fmt.Fprintf(r.Out, "%s\n", f)
+				}
+				ciw.Annotation("error", sr.File, 0, sr.Suite+"/"+tr.TestName, strings.Join(tr.Failures, "\n"))
+			}
+		}
+
+		ciw.GroupEnd()
+	}
+
+	fmt.Fprintf(r.Out, "\n%s\n", strings.Repeat("─", 60))
+	total := pass + fail + skip
+	summary := fmt.Sprintf("Tests: %d total", total)
+	if pass > 0 {
+		summary += fmt.Sprintf(", %s passed", passColor.Sprintf("%d", pass))
+	}
+	if fail > 0 {
+		summary += fmt.Sprintf(", %s failed", failColor.Sprintf("%d", fail))
+	}
+	if skip > 0 {
+		summary += fmt.Sprintf(", %s skipped", skipColor.Sprintf("%d", skip))
+	}
+	summary += fmt.Sprintf(" %s", durationColor.Sprintf("(%s total test time)", formatDuration(totalTestTime)))
+	fmt.Fprintln(r.Out, summary)
+
+	return nil
+}
 
 // PrettyReporter writes human-readable colored output.
 type PrettyReporter struct {

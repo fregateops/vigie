@@ -3,13 +3,17 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/fregateops/vigie/internal/clog"
 	"github.com/fregateops/vigie/internal/version"
 	"github.com/spf13/cobra"
 )
 
-var flagVerbose int
+var (
+	flagVerbose     int
+	flagParallelism int
+)
 
 var rootCmd = &cobra.Command{
 	Use:   "vigie",
@@ -27,6 +31,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.Version = version.Version
 	rootCmd.PersistentFlags().CountVarP(&flagVerbose, "verbose", "v", "Increase verbosity: -v debug, -vv trace (logs go to stderr)")
+	rootCmd.PersistentFlags().IntVarP(&flagParallelism, "parallelism", "p", runtime.NumCPU(), "Number of parallel tests")
 }
 
 // exitErr prints a formatted message to stderr and exits with code.
