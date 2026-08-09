@@ -53,6 +53,39 @@ func SupportedTiersFor(a dsl.Assertion) []string {
 	return Tiers(AllTiers...)
 }
 
+// intersectTiers returns the slice of labels common to a and b, preserving
+// the order they appear in a. The order matters: FindUnsupportedMatcher
+// reports the "needed tier" as the first surviving label, which we want to
+// be the strictest still-accepted tier (a's caller passes the matcher's own
+// tier list as a, so its order is authoritative).
+func intersectTiers(a, b []string) []string {
+	out := make([]string, 0, len(a))
+	for _, label := range a {
+		for _, other := range b {
+			if label == other {
+				out = append(out, label)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// intersectChildTiers returns the tier set common to every child assertion.
+// Used by composite matchers (allOf, anyOf) so the runner satisfies the
+// strictest child. anyOf uses intersection too — see quantifier.go for why
+// we don't treat anyOf as a union here.
+func intersectChildTiers(children []dsl.Assertion) []string {
+	if len(children) == 0 {
+		return Tiers(AllTiers...)
+	}
+	result := SupportedTiersFor(children[0])
+	for _, child := range children[1:] {
+		result = intersectTiers(result, SupportedTiersFor(child))
+	}
+	return result
+}
+
 // FindUnsupportedMatcher walks asserts (recursively, through allOf/anyOf) and
 // returns the first assertion whose matcher excludes activeTier. When ok is
 // true, the caller should skip the test with a message naming `name` and the
