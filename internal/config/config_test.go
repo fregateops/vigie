@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -80,5 +82,42 @@ testApply:
 	}
 	if got, want := cfg.TestApply.TestsDir, "/abs/path/tests"; got != want {
 		t.Errorf("TestApply.TestsDir: want %q, got %q", want, got)
+	}
+}
+
+func TestLoad_MissingFileReturnsDefaults(t *testing.T) {
+	cfg, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatalf("Load on chart without .vigie.yaml: %v", err)
+	}
+	if cfg.Defaults.Release.Name != "release-name" {
+		t.Errorf("want default release name, got %q", cfg.Defaults.Release.Name)
+	}
+}
+
+func TestLoad_EmptyFileKeepsDefaults(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, filename), []byte("\n  \n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load on empty .vigie.yaml: %v", err)
+	}
+	if cfg.Defaults.Release.Namespace != "default" {
+		t.Errorf("want default namespace, got %q", cfg.Defaults.Release.Namespace)
+	}
+}
+
+func TestLoad_UnknownKeyIsRejected(t *testing.T) {
+	dir := t.TempDir()
+	// `ruleSet` is a typo for `ruleSets` — strict decoding must surface it
+	// instead of silently dropping the user's intent.
+	body := "lint:\n  ruleSet:\n    - chart-yaml\n"
+	if err := os.WriteFile(filepath.Join(dir, filename), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(dir); err == nil {
+		t.Fatal("Load must reject an unknown key (misspelled `ruleSet`), got nil error")
 	}
 }

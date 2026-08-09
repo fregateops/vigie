@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -181,7 +182,15 @@ func Load(chartDir string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
-	if err := yaml.Unmarshal(data, cfg); err != nil {
+	// An empty file is valid and keeps the defaults.
+	if len(bytes.TrimSpace(data)) == 0 {
+		return cfg, nil
+	}
+	// Strict decoding so a misspelled or misplaced key fails loudly instead of
+	// being silently ignored (e.g. `ruleSet:` for `ruleSets:`).
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(cfg); err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
 	if err := validateConfigKubeVersions(cfg); err != nil {
