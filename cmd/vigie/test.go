@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -74,7 +75,7 @@ func runTestCmd(cmd *cobra.Command, args []string) error {
 		exitErr(2, "%v", err)
 	}
 
-	rep := &report.PrettyReporter{Out: os.Stdout, CI: cienv.Detect()}
+	rep := selectReporter(flagOutput, os.Stdout, cienv.Detect())
 	if err := rep.Report(results); err != nil {
 		exitErr(2, "reporting: %v", err)
 	}
@@ -83,6 +84,17 @@ func runTestCmd(cmd *cobra.Command, args []string) error {
 		os.Exit(1)
 	}
 	return nil
+}
+
+// selectReporter maps the --output format to a test-results reporter.
+// sarif and tap land in M4; unknown formats fall back to pretty.
+func selectReporter(format string, out io.Writer, ciKind cienv.Kind) report.Reporter {
+	switch format {
+	case "junit":
+		return &report.JUnitReporter{Out: out}
+	default:
+		return &report.PrettyReporter{Out: out, CI: ciKind}
+	}
 }
 
 // resolveTestsDir picks the CLI --tests flag when set, else the config value.

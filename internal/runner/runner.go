@@ -16,6 +16,7 @@ import (
 	"github.com/fregateops/vigie/internal/clog"
 	"github.com/fregateops/vigie/internal/config"
 	"github.com/fregateops/vigie/internal/dsl"
+	"github.com/fregateops/vigie/internal/matchers"
 	"github.com/fregateops/vigie/internal/matrix"
 	"github.com/fregateops/vigie/internal/render"
 	"github.com/fregateops/vigie/internal/snapshot"
@@ -246,6 +247,11 @@ func runTest(et expandedTest, suite *dsl.Suite, opts Options, store *snapshot.St
 		return tr
 	}
 
+	// Helper test: test.Call != "".
+	if test.Call != "" {
+		return runHelperTest(et, suite, opts, store)
+	}
+
 	req := buildRenderRequest(test, suite, opts)
 	clog.Trace("render request",
 		"suite", suite.SuiteName, "test", et.DisplayName,
@@ -260,6 +266,59 @@ func runTest(et expandedTest, suite *dsl.Suite, opts Options, store *snapshot.St
 	}
 
 	evaluateAssertions(&tr, et, suite, allDocs, renderErr, store)
+
+	tr.Pass = len(tr.Failures) == 0
+	return tr
+}
+
+// runHelperTest handles tests with call: (helper template tests).
+func runHelperTest(et expandedTest, suite *dsl.Suite, opts Options, store *snapshot.Store) TestResult {
+	test := et.Test
+	tr := TestResult{SuiteName: suite.SuiteName, TestName: et.DisplayName}
+
+	// Resolve helper file paths relative to the chart root.
+	resolvedHelpers := make([]string, len(suite.Helpers))
+	for i, h := range suite.Helpers {
+		if filepath.IsAbs(h) {
+			resolvedHelpers[i] = h
+		} else {
+			resolvedHelpers[i] = filepath.Join(opts.ChartPath, h)
+		}
+	}
+
+	clog.Trace("calling helper",
+		"suite", suite.SuiteName, "test", et.DisplayName,
+		"helper", test.Call, "outputAs", test.OutputAs,
+		"helperFiles", resolvedHelpers, "argKeys", mapKeys(test.Args))
+	helperResult, err := render.CallHelper(resolvedHelpers, test.Call, test.Args, test.OutputAs)
+	if err != nil {
+		tr.Failures = append(tr.Failures, fmt.Sprintf("helper render failed: %v", err))
+		tr.Pass = false
+		return tr
+	}
+
+	for i, assertion := range test.Asserts {
+		ctx := matchers.EvalContext{
+			IsHelperTest:  true,
+			MatrixEntry:   et.MatrixEntry,
+			CaseEntry:     et.CaseEntry,
+			SuiteName:     suite.SuiteName,
+			TestName:      et.DisplayName,
+			AssertIdx:     i,
+			SnapshotStore: store,
+		}
+		// For string outputAs, HelperOutput is the raw string.
+		if test.OutputAs == "" || test.OutputAs == "string" {
+			ctx.HelperOutput = helperResult.Raw
+		} else {
+			ctx.HelperOutput = helperResult.Parsed
+		}
+
+		result := matchers.Evaluate(assertion, ctx)
+		if !result.Pass {
+			tr.Failures = append(tr.Failures, fmt.Sprintf("        → %s", result.Message))
+		}
+	}
 
 	tr.Pass = len(tr.Failures) == 0
 	return tr
