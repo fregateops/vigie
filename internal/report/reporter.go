@@ -5,12 +5,10 @@ import (
 	"github.com/fregateops/vigie/internal/runner"
 )
 
-// Reporter writes test results to an output.
+// Reporter renders results to an output. Every reporter handles both test
+// results (Report) and lint findings (ReportLint) so a single --output format
+// works uniformly across `vigie test` and `vigie lint`.
 type Reporter interface {
 	Report(results []runner.SuiteResult) error
-}
-
-// LintReporter writes lint findings to an output.
-type LintReporter interface {
 	ReportLint(result lint.Result) error
 }

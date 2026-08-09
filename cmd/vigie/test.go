@@ -2,14 +2,12 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/fregateops/vigie/internal/cienv"
 	"github.com/fregateops/vigie/internal/config"
-	"github.com/fregateops/vigie/internal/report"
 	"github.com/fregateops/vigie/internal/runner"
 	"github.com/spf13/cobra"
 )
@@ -89,17 +87,6 @@ func runTestCmd(cmd *cobra.Command, args []string) error {
 		os.Exit(1)
 	}
 	return nil
-}
-
-// selectReporter maps the --output format to a test-results reporter.
-// sarif and tap land in M4; unknown formats fall back to pretty.
-func selectReporter(format string, out io.Writer, ciKind cienv.Kind) report.Reporter {
-	switch format {
-	case "junit":
-		return &report.JUnitReporter{Out: out}
-	default:
-		return &report.PrettyReporter{Out: out, CI: ciKind}
-	}
 }
 
 // resolveTestsDir picks the CLI --tests flag when set, else the config value.

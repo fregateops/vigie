@@ -9,7 +9,6 @@ import (
 	"github.com/fregateops/vigie/internal/lint"
 	"github.com/fregateops/vigie/internal/lint/helmv3"
 	"github.com/fregateops/vigie/internal/lint/rules"
-	"github.com/fregateops/vigie/internal/report"
 	"github.com/spf13/cobra"
 )
 
@@ -69,7 +68,7 @@ func runLintCmd(cmd *cobra.Command, args []string) error {
 		exitErr(2, "lint: %v", err)
 	}
 
-	rep := &report.PrettyReporter{Out: os.Stdout, CI: cienv.Detect()}
+	rep := selectReporter(flagOutput, os.Stdout, cienv.Detect())
 	if err := rep.ReportLint(result); err != nil {
 		exitErr(2, "reporting: %v", err)
 	}
