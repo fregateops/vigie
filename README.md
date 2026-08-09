@@ -220,6 +220,23 @@ tests:
       - equal: { value: "myrepo/app:1.2.3" }
 ```
 
+### Editor autocomplete
+
+`vigie schema` prints the test-file JSON Schema. Reference it from a test file with a
+[yaml-language-server](https://github.com/redhat-developer/yaml-language-server) modeline for
+completion and validation as you type — either the hosted schema:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/fregateops/vigie/refs/heads/main/pkg/api/schema/v1/testfile.json
+```
+
+or a local copy for offline/pinned use:
+
+```sh
+vigie schema > .vigie.schema.json
+# then:  # yaml-language-server: $schema=./.vigie.schema.json
+```
+
 ---
 
 ## CLI reference

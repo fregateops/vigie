@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/fregateops/vigie/refs/heads/main/pkg/api/schema/v1/testfile.json
 suite: deployment
 templates:
   - templates/deployment.yaml
