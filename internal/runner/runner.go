@@ -10,10 +10,13 @@ import (
 	"strings"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/fregateops/vigie/internal/cel"
 	"github.com/fregateops/vigie/internal/clog"
 	"github.com/fregateops/vigie/internal/config"
 	"github.com/fregateops/vigie/internal/dsl"
+	"github.com/fregateops/vigie/internal/matrix"
 	"github.com/fregateops/vigie/internal/render"
 )
 
@@ -88,17 +91,123 @@ func runFile(filePath string, opts Options) (SuiteResult, error) {
 	return sr, nil
 }
 
-// expandTests expands all matrix/cases for a list of tests. matrix/cases
-// expansion lands with the matrix slice; for now each test maps to one case.
+// expandTests expands all matrix/cases for a list of tests.
 func expandTests(tests []dsl.Test) ([]expandedTest, error) {
 	var out []expandedTest
 	for _, test := range tests {
-		out = append(out, expandedTest{
-			Test:        test,
-			DisplayName: test.It,
-		})
+		switch {
+		case test.Matrix != nil:
+			entries, err := matrix.Expand(test.Matrix)
+			if err != nil {
+				return nil, fmt.Errorf("test %q matrix expand: %w", test.It, err)
+			}
+			for _, entry := range entries {
+				// Wrap entry under "matrix" key so CEL expressions like
+				// ${{ matrix.tier }} resolve correctly.
+				bindings := map[string]any{"matrix": entry}
+				interpolated, err := interpolateTest(test, bindings)
+				if err != nil {
+					return nil, fmt.Errorf("test %q matrix interpolate: %w", test.It, err)
+				}
+				name := fmt.Sprintf("%s [%s]", test.It, formatEntry(entry))
+				out = append(out, expandedTest{
+					Test:        interpolated,
+					MatrixEntry: entry,
+					DisplayName: name,
+				})
+			}
+
+		case len(test.Cases) > 0:
+			cases, err := matrix.ExpandCases(test.Cases)
+			if err != nil {
+				return nil, fmt.Errorf("test %q cases expand: %w", test.It, err)
+			}
+			for _, c := range cases {
+				// Build case bindings: Extra + name + set.
+				caseEntry := make(map[string]any, len(c.Extra)+2)
+				for k, v := range c.Extra {
+					caseEntry[k] = v
+				}
+				caseEntry["name"] = c.Name
+				caseEntry["set"] = c.Set
+
+				// Wrap caseEntry under "case" key so CEL expressions like
+				// ${{ case.expectedReplicas }} resolve correctly.
+				bindings := map[string]any{"case": caseEntry}
+				interpolated, err := interpolateTest(test, bindings)
+				if err != nil {
+					return nil, fmt.Errorf("test %q case %q interpolate: %w", test.It, c.Name, err)
+				}
+				// Merge case.Set into interpolated test inputs.
+				if c.Set != nil {
+					if interpolated.Inputs == nil {
+						interpolated.Inputs = &dsl.Inputs{}
+					}
+					if interpolated.Inputs.Set == nil {
+						interpolated.Inputs.Set = make(map[string]any)
+					}
+					for k, v := range c.Set {
+						interpolated.Inputs.Set[k] = v
+					}
+				}
+				name := fmt.Sprintf("%s [%s]", test.It, c.Name)
+				out = append(out, expandedTest{
+					Test:        interpolated,
+					CaseEntry:   caseEntry,
+					DisplayName: name,
+				})
+			}
+
+		default:
+			out = append(out, expandedTest{
+				Test:        test,
+				DisplayName: test.It,
+			})
+		}
 	}
 	return out, nil
+}
+
+// interpolateTest applies ${{ }} interpolation over the entire test using bindings.
+func interpolateTest(test dsl.Test, bindings map[string]any) (dsl.Test, error) {
+	// Marshal to map[string]any via YAML.
+	b, err := yaml.Marshal(test)
+	if err != nil {
+		return test, fmt.Errorf("interpolateTest marshal: %w", err)
+	}
+	var raw map[string]any
+	if err := yaml.Unmarshal(b, &raw); err != nil {
+		return test, fmt.Errorf("interpolateTest unmarshal to map: %w", err)
+	}
+	// Run interpolation.
+	interpolated, err := matrix.Interpolate(raw, bindings)
+	if err != nil {
+		return test, fmt.Errorf("interpolateTest interpolate: %w", err)
+	}
+	// Marshal back to YAML and unmarshal into dsl.Test.
+	b2, err := yaml.Marshal(interpolated)
+	if err != nil {
+		return test, fmt.Errorf("interpolateTest marshal result: %w", err)
+	}
+	var result dsl.Test
+	if err := yaml.Unmarshal(b2, &result); err != nil {
+		return test, fmt.Errorf("interpolateTest unmarshal result: %w", err)
+	}
+	return result, nil
+}
+
+// formatEntry formats a matrix entry as "k=v, k2=v2" (sorted keys).
+func formatEntry(entry map[string]any) string {
+	keys := make([]string, 0, len(entry))
+	for k := range entry {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%v", k, entry[k]))
+	}
+	return strings.Join(parts, ", ")
 }
 
 func runTest(et expandedTest, suite *dsl.Suite, opts Options) (tr TestResult) {
