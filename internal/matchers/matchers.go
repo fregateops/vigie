@@ -7,6 +7,7 @@ import (
 
 	"github.com/fregateops/vigie/internal/dsl"
 	"github.com/fregateops/vigie/internal/path"
+	"github.com/fregateops/vigie/internal/snapshot"
 )
 
 // Result is the outcome of evaluating a single assertion.
@@ -17,9 +18,9 @@ type Result struct {
 
 // EvalContext carries the data available to matchers.
 //
-// The snapshot-store fields (matchSnapshot) and the apply-tier fields
-// (InApplyTier/ApplyError/RESTConfig/Namespace, used by applies/rejected and
-// the live-cluster matchers) are added back when those slices land.
+// The apply-tier fields (InApplyTier/ApplyError/RESTConfig/Namespace, used by
+// applies/rejected and the live-cluster matchers) are added back when those
+// slices land.
 type EvalContext struct {
 	// Docs is the full set of rendered YAML documents for the test.
 	Docs []map[string]any
@@ -35,6 +36,14 @@ type EvalContext struct {
 	IsHelperTest bool
 	// HelperOutput is the parsed output of a helper template invocation.
 	HelperOutput any
+	// SnapshotStore is the snapshot store used by the matchSnapshot matcher.
+	SnapshotStore *snapshot.Store
+	// SuiteName is the name of the test suite (used for snapshot keys).
+	SuiteName string
+	// TestName is the name of the test (used for snapshot keys).
+	TestName string
+	// AssertIdx is the index of the assertion within the test (used for snapshot keys).
+	AssertIdx int
 }
 
 // Evaluate runs a single assertion against ctx and returns its result. The

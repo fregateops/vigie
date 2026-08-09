@@ -14,8 +14,9 @@ import (
 )
 
 var (
-	flagTestFile     string
-	flagTestTestsDir string
+	flagTestFile        string
+	flagTestTestsDir    string
+	flagTestSnapshotDir string
 )
 
 var testCmd = &cobra.Command{
@@ -28,6 +29,7 @@ var testCmd = &cobra.Command{
 func init() {
 	testCmd.Flags().StringVar(&flagTestFile, "file", "", "Run a specific test file instead of discovering all")
 	testCmd.Flags().StringVar(&flagTestTestsDir, "tests", "", "Directory to scan recursively for *_test.yaml (overrides test.testsDir; default: <chart>/tests)")
+	testCmd.Flags().StringVar(&flagTestSnapshotDir, "snapshot-dir", "", "Directory for snapshot files (default: <chart>/tests/snapshots)")
 	rootCmd.AddCommand(testCmd)
 }
 
@@ -64,6 +66,7 @@ func runTestCmd(cmd *cobra.Command, args []string) error {
 		TestFiles:   files,
 		Parallelism: flagParallelism,
 		Cfg:         cfg,
+		SnapshotDir: flagTestSnapshotDir,
 	}
 
 	results, err := runner.Run(opts)

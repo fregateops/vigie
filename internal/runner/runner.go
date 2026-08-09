@@ -18,6 +18,7 @@ import (
 	"github.com/fregateops/vigie/internal/dsl"
 	"github.com/fregateops/vigie/internal/matrix"
 	"github.com/fregateops/vigie/internal/render"
+	"github.com/fregateops/vigie/internal/snapshot"
 )
 
 // TestResult is the outcome of a single test case.
@@ -41,10 +42,21 @@ type SuiteResult struct {
 
 // Options controls runner behavior.
 type Options struct {
-	ChartPath   string
-	TestFiles   []string
-	Parallelism int
-	Cfg         *config.Config
+	ChartPath      string
+	TestFiles      []string
+	Parallelism    int
+	Cfg            *config.Config
+	SnapshotDir    string // default: "<chartPath>/tests/snapshots"
+	SnapshotUpdate bool
+}
+
+// resolveSnapshotDir returns the snapshot directory: the explicit override
+// when set, otherwise the per-chart default "<chartPath>/tests/snapshots".
+func resolveSnapshotDir(override, chartPath string) string {
+	if override != "" {
+		return override
+	}
+	return filepath.Join(chartPath, "tests", "snapshots")
 }
 
 // expandedTest wraps a dsl.Test with its matrix/case bindings and display name.
@@ -83,8 +95,11 @@ func runFile(filePath string, opts Options) (SuiteResult, error) {
 	}
 	slog.Debug("expanded test cases", "suite", suite.SuiteName, "count", len(expanded))
 
+	// Resolve snapshot store.
+	store := &snapshot.Store{Dir: resolveSnapshotDir(opts.SnapshotDir, opts.ChartPath), Update: opts.SnapshotUpdate}
+
 	for _, et := range expanded {
-		sr.Results = append(sr.Results, runTest(et, suite, opts))
+		sr.Results = append(sr.Results, runTest(et, suite, opts, store))
 	}
 	sr.Duration = time.Since(start)
 	slog.Debug("suite finished", "suite", suite.SuiteName, "tests", len(sr.Results), "duration", sr.Duration)
@@ -210,7 +225,7 @@ func formatEntry(entry map[string]any) string {
 	return strings.Join(parts, ", ")
 }
 
-func runTest(et expandedTest, suite *dsl.Suite, opts Options) (tr TestResult) {
+func runTest(et expandedTest, suite *dsl.Suite, opts Options, store *snapshot.Store) (tr TestResult) {
 	test := et.Test
 	tr = TestResult{SuiteName: suite.SuiteName, TestName: et.DisplayName}
 	start := time.Now()
@@ -244,7 +259,7 @@ func runTest(et expandedTest, suite *dsl.Suite, opts Options) (tr TestResult) {
 		allDocs = renderResult.Docs
 	}
 
-	evaluateAssertions(&tr, et, suite, allDocs, renderErr)
+	evaluateAssertions(&tr, et, suite, allDocs, renderErr, store)
 
 	tr.Pass = len(tr.Failures) == 0
 	return tr
