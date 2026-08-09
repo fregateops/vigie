@@ -1,0 +1,81 @@
+# .vigie.yaml — vigie per-chart configuration
+#
+# Drop this file at the root of your Helm chart (next to Chart.yaml) and
+# uncomment the keys you want to override. Every key is optional; if the file
+# is absent or empty, vigie uses the built-in defaults shown below.
+#
+# This reference documents the surface that ships today (`vigie lint`,
+# `vigie test`). Configuration for `vigie validate` and `vigie test-apply`
+# lands with those commands — see the roadmap in the README.
+#
+# Reference: https://github.com/fregateops/vigie
+
+# ---------------------------------------------------------------------------
+# defaults — release identity passed to `helm template` for every test,
+# unless a suite-level `defaults:` or a per-test `inputs:` block overrides it.
+# ---------------------------------------------------------------------------
+defaults:
+  release:
+    # Release name. Mirrors Helm's `--release-name`. Default: release-name
+    name: release-name
+    # Namespace. Mirrors Helm's `--namespace`. Default: default
+    namespace: default
+
+# ---------------------------------------------------------------------------
+# lint — controls `vigie lint`.
+# ---------------------------------------------------------------------------
+lint:
+  # Allowlist of rule sets to run. Empty/omitted means "all built-in sets".
+  # Built-in sets:
+  #   - helm-v3-lint            (delegates to Helm v3's `helm lint`)
+  #   - chart-yaml              (Chart.yaml structure: apiVersion, name, version, description)
+  #   - template-best-practices (hardcoded namespaces, missing resource limits, ...)
+  #   - deprecation             (removed/deprecated Kubernetes APIs, plus operator-specific sets)
+  # Overridden by the `--rule-sets` CLI flag.
+  ruleSets:
+    - chart-yaml
+    - template-best-practices
+    - deprecation
+
+  # Denylist of individual rule IDs that must not run, even if their rule set
+  # is enabled. Rule IDs are namespaced as `<ruleSet>_<id>`, for example:
+  #   - chart-yaml_api-version
+  #   - chart-yaml_name
+  #   - chart-yaml_version
+  #   - chart-yaml_description
+  #   - template-best-practices_hardcoded-namespace
+  #   - template-best-practices_missing-resource-limits
+  #   - deprecation_k8s-api
+  #   - deprecation_cert-manager
+  #   - deprecation_grafana-operator
+  # Distinct from `ignore` below: `disableRules` skips execution entirely;
+  # `ignore` filters findings post-execution by file path. Additive with the
+  # `--disable-rules` CLI flag.
+  disableRules:
+    - template-best-practices_missing-resource-limits
+
+  # Kubernetes versions to render against for deprecation/version-aware rules.
+  # Each version is a `MAJOR.MINOR` string. Empty/omitted means "all supported".
+  # Overridden by the `--kube-version` CLI flag.
+  kubeVersions:
+    - "1.30"
+    - "1.31"
+
+  # Suppress findings for a specific rule, optionally scoped to file paths.
+  # `paths` is a list of glob patterns matched against the finding's source
+  # file path. Omit `paths` to suppress the rule everywhere.
+  ignore:
+    - rule: template-best-practices_missing-resource-limits
+      paths:
+        - templates/jobs/*.yaml
+
+# ---------------------------------------------------------------------------
+# test — controls `vigie test` (template-tier: per-test render + assertions).
+#
+# CLI: `vigie test ./mychart [--file f] [--tests dir] [--snapshot-dir dir]`.
+# ---------------------------------------------------------------------------
+test:
+  # Directory `vigie test` scans recursively for `*_test.yaml`. Relative
+  # paths resolve against the chart directory. Empty/omitted defaults to
+  # `<chart>/tests`. Overridden by the `--tests` CLI flag.
+  testsDir: tests/unit
