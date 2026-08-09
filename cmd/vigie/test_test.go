@@ -11,9 +11,10 @@ import (
 )
 
 // runTestSuite exercises the same stack as the test command: default config,
-// unit-test discovery, and the template-tier runner. Snapshots are isolated in
-// a temp dir so the first run creates them deterministically.
-func runTestSuite(t *testing.T, chartPath string) []runner.SuiteResult {
+// unit-test discovery, and the template-tier runner. An empty snapshotDir uses
+// the chart's committed snapshots (so matchSnapshot compares against the golden
+// file); pass a temp dir to isolate a run.
+func runTestSuite(t *testing.T, chartPath, snapshotDir string) []runner.SuiteResult {
 	t.Helper()
 	cfg, err := config.Load(chartPath)
 	if err != nil {
@@ -31,7 +32,7 @@ func runTestSuite(t *testing.T, chartPath string) []runner.SuiteResult {
 		TestFiles:   files,
 		Parallelism: 2,
 		Cfg:         cfg,
-		SnapshotDir: t.TempDir(),
+		SnapshotDir: snapshotDir,
 	})
 	if err != nil {
 		t.Fatalf("runner.Run(%s): %v", chartPath, err)
@@ -40,7 +41,9 @@ func runTestSuite(t *testing.T, chartPath string) []runner.SuiteResult {
 }
 
 func TestTest_BasicChart_AllPass(t *testing.T) {
-	results := runTestSuite(t, "../../testdata/charts/basic")
+	// Empty snapshotDir → the chart's committed golden is compared, guarding
+	// both the matcher library and the snapshot against rendering drift.
+	results := runTestSuite(t, "../../testdata/charts/basic", "")
 	if runner.AnyFailed(results) {
 		t.Fatalf("basic chart should have no failing tests; results: %+v", results)
 	}
@@ -54,7 +57,7 @@ func TestTest_BasicChart_AllPass(t *testing.T) {
 }
 
 func TestTest_FailingChart_ReportsFailure(t *testing.T) {
-	results := runTestSuite(t, "../../testdata/charts/test-failures")
+	results := runTestSuite(t, "../../testdata/charts/test-failures", t.TempDir())
 	if !runner.AnyFailed(results) {
 		t.Fatal("test-failures chart should report at least one failing test, got none")
 	}

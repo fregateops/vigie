@@ -1,0 +1,36 @@
+snapshot/matches the rendered Deployment spec[0]:
+    replicas: 3
+    selector:
+        matchLabels:
+            app.kubernetes.io/instance: release-name
+            app.kubernetes.io/name: basic
+    template:
+        metadata:
+            labels:
+                app.kubernetes.io/instance: release-name
+                app.kubernetes.io/name: basic
+        spec:
+            containers:
+                - image: myrepo/app:1.2.3
+                  imagePullPolicy: IfNotPresent
+                  livenessProbe:
+                    httpGet:
+                        path: /healthz
+                        port: http
+                  name: basic
+                  ports:
+                    - containerPort: 80
+                      name: http
+                      protocol: TCP
+                  readinessProbe:
+                    httpGet:
+                        path: /readyz
+                        port: http
+                  resources:
+                    limits:
+                        cpu: 500m
+                        memory: 256Mi
+                    requests:
+                        cpu: 250m
+                        memory: 128Mi
+            serviceAccountName: release-name-basic

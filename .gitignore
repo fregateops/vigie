@@ -8,4 +8,5 @@ bin/
 # kept out of the tree so goreleaser's git-state validation stays clean.
 release_notes.md
 
-.claude/worktree/
+# AI folder
+.claude/
