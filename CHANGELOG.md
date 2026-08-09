@@ -1,6 +1,48 @@
 # Changelog
 
 All notable changes to this project are documented in this file.
+## [0.3.0] - 2026-08-09
+
+### Features
+
+- *(path)* Add path expressions parser
+- *(scehma)* Add vigie test DSL types and schema generation
+- *(dsl)* Add schema parser and validator
+- *(schema)* Add vigie schema command
+- *(render)* Add CallHelper for helper-template
+- *(matchers)* Add template test matchers
+- *(runner)* Add first test runner
+- *(test)* Wire  command
+- *(matchers)* Add more complex matcher like CEL expression, schema and all/anyOf composite
+- *(matrix)* Add support of matrix cases with values interpolation
+- *(snapshot)* Add snapshot macher and store
+- *(report)* Add junit output reporter
+
+### Bug fixes
+
+- *(schema)* Give resolvable schema ID
+- *(config)* Make config parsing strict
+- *(dsl)* Surface offending key + location in schema errors
+- *(path)* Support quoted bracket keys for dotted/slashed map keys
+- *(test)* Fail on run warnings with exit 5; add --pass-on-warning
+
+### Refactor
+
+- *(report)* Unify lint and test reporter
+
+### Documentation
+
+- Add config example and usage in README
+- Add usage examples to commands
+- *(readme)* Add editor autocomplete section
+
+### Testing
+
+- *(runner)* Add testdata charts for test command integration tests
+- Add vigie config to basic test chart
+- *(snapshot)* Commit golden snapshot use for tests
+- Add simple smoke test makefile target
+
 ## [0.2.0] - 2026-08-08
 
 ### Features
