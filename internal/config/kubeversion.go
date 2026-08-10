@@ -5,6 +5,12 @@ import (
 	"regexp"
 )
 
+// DefaultKubeVersion is the Kubernetes version vigie validates against when a
+// command or config supplies none — kubeconform fetches the matching schemas
+// and `helm template` reports it as `.Capabilities.KubeVersion`. Cluster
+// backends (M6+) will provision this same version by default.
+const DefaultKubeVersion = "1.36.1"
+
 // kubeVersionPattern matches a full Kubernetes semver: X.Y.Z with an optional
 // leading "v". Truncated forms like "1.30" are rejected because the dl.k8s.io
 // download URL (used by EnsureKubernetesBinary for kube-controller-manager and
