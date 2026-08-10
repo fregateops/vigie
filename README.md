@@ -293,6 +293,8 @@ vigie test <chart>            template tier: render + assert (tests/unit/*_test.
   --file <path>               run a single test file instead of discovering all
   --tests <dir>               discovery root (default: <chart>/tests)
   --snapshot-dir <dir>        snapshot directory (default: <chart>/tests/snapshots)
+  --no-schema                 skip the per-test kubeconform pass (on by default)
+  --kube-version <ver>        Kubernetes version for the kubeconform pass (default: 1.36.1)
   --pass-on-warning           exit 0 on run warnings, e.g. no tests executed (default: exit 5)
 
 vigie validate <chart>        chart tier: render values.yaml + overlays, validate with kubeconform
@@ -336,6 +338,8 @@ validate:
 
 test:
   testsDir: tests/unit
+  skipSchema: false          # kubeconform runs per test by default; true opts out
+  kubeVersions: [1.36.1]     # first entry pins the kubeconform version
 ```
 
 ### Lint rule sets

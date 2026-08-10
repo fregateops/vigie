@@ -17,6 +17,8 @@ var (
 	flagTestTestsDir      string
 	flagTestSnapshotDir   string
 	flagTestPassOnWarning bool
+	flagTestNoSchema      bool
+	flagTestKubeVersion   string
 )
 
 // exitWarnings is the exit code for a run that produced only warnings (e.g. no
@@ -42,6 +44,8 @@ func init() {
 	testCmd.Flags().StringVar(&flagTestTestsDir, "tests", "", "Directory to scan recursively for *_test.yaml (overrides test.testsDir; default: <chart>/tests)")
 	testCmd.Flags().StringVar(&flagTestSnapshotDir, "snapshot-dir", "", "Directory for snapshot files (default: <chart>/tests/snapshots)")
 	testCmd.Flags().BoolVar(&flagTestPassOnWarning, "pass-on-warning", false, "Exit 0 on run warnings such as no tests executed (default: exit 5)")
+	testCmd.Flags().BoolVar(&flagTestNoSchema, "no-schema", false, "Skip the per-test kubeconform pass (on by default)")
+	testCmd.Flags().StringVar(&flagTestKubeVersion, "kube-version", "", "Kubernetes version for the per-test kubeconform pass (default: 1.36.1)")
 	rootCmd.AddCommand(testCmd)
 }
 
@@ -49,6 +53,10 @@ func runTestCmd(cmd *cobra.Command, args []string) error {
 	chartPath := args[0]
 
 	slog.Debug("invoked", "command", "test", "chart", chartPath, "parallelism", flagParallelism)
+
+	if err := config.ValidateKubeVersion("--kube-version", flagTestKubeVersion); err != nil {
+		exitErr(3, "%v", err)
+	}
 
 	cfg, err := config.Load(chartPath)
 	if err != nil {
@@ -76,12 +84,21 @@ func runTestCmd(cmd *cobra.Command, args []string) error {
 	if len(files) == 0 {
 		warnings = append(warnings, fmt.Sprintf("no unit test files found under %s", displayTestsRoot(chartPath, testsDir)))
 	} else {
+		// Schema validation is on by default; --no-schema or test.skipSchema disables it.
+		skipSchema := flagTestNoSchema || cfg.Test.SkipSchema
+		kubeVersion := flagTestKubeVersion
+		if kubeVersion == "" && len(cfg.Test.KubeVersions) > 0 {
+			kubeVersion = cfg.Test.KubeVersions[0]
+		}
+
 		opts := runner.Options{
-			ChartPath:   chartPath,
-			TestFiles:   files,
-			Parallelism: flagParallelism,
-			Cfg:         cfg,
-			SnapshotDir: flagTestSnapshotDir,
+			ChartPath:       chartPath,
+			TestFiles:       files,
+			Parallelism:     flagParallelism,
+			Cfg:             cfg,
+			SnapshotDir:     flagTestSnapshotDir,
+			ValidateSchemas: !skipSchema,
+			KubeVersion:     kubeVersion,
 		}
 
 		results, err := runner.Run(opts)

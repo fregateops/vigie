@@ -43,12 +43,14 @@ type SuiteResult struct {
 
 // Options controls runner behavior.
 type Options struct {
-	ChartPath      string
-	TestFiles      []string
-	Parallelism    int
-	Cfg            *config.Config
-	SnapshotDir    string // default: "<chartPath>/tests/snapshots"
-	SnapshotUpdate bool
+	ChartPath       string
+	TestFiles       []string
+	Parallelism     int
+	Cfg             *config.Config
+	SnapshotDir     string // default: "<chartPath>/tests/snapshots"
+	SnapshotUpdate  bool
+	ValidateSchemas bool   // when true, kubeconform-validate each test's rendered docs
+	KubeVersion     string // kubernetes version for schema validation; empty = config.DefaultKubeVersion
 }
 
 // resolveSnapshotDir returns the snapshot directory: the explicit override
@@ -70,14 +72,30 @@ type expandedTest struct {
 
 // Run executes all test files and returns suite-level results.
 func Run(opts Options) ([]SuiteResult, error) {
-	slog.Debug("starting runner", "files", len(opts.TestFiles), "parallelism", opts.Parallelism)
+	slog.Debug("starting runner", "files", len(opts.TestFiles), "parallelism", opts.Parallelism, "validateSchemas", opts.ValidateSchemas)
+
+	// Build one schema validator shared across all files/tests; its in-memory
+	// schema cache then amortises across every rendered document.
+	var schemaValidator *render.SchemaValidator
+	if opts.ValidateSchemas {
+		kubeVer := opts.KubeVersion
+		if kubeVer == "" {
+			kubeVer = config.DefaultKubeVersion
+		}
+		sv, err := render.NewSchemaValidator(kubeVer)
+		if err != nil {
+			return nil, fmt.Errorf("setup error: %w", err)
+		}
+		schemaValidator = sv
+		slog.Debug("schema validator ready", "kubeVersion", kubeVer)
+	}
 
 	return runParallel(opts.TestFiles, opts.Parallelism, func(_ int, path string) (SuiteResult, error) {
-		return runFile(path, opts)
+		return runFile(path, opts, schemaValidator)
 	})
 }
 
-func runFile(filePath string, opts Options) (SuiteResult, error) {
+func runFile(filePath string, opts Options, sv *render.SchemaValidator) (SuiteResult, error) {
 	slog.Debug("loading test file", "file", filePath)
 	start := time.Now()
 
@@ -100,7 +118,7 @@ func runFile(filePath string, opts Options) (SuiteResult, error) {
 	store := &snapshot.Store{Dir: resolveSnapshotDir(opts.SnapshotDir, opts.ChartPath), Update: opts.SnapshotUpdate}
 
 	for _, et := range expanded {
-		sr.Results = append(sr.Results, runTest(et, suite, opts, store))
+		sr.Results = append(sr.Results, runTest(et, suite, opts, store, sv))
 	}
 	sr.Duration = time.Since(start)
 	slog.Debug("suite finished", "suite", suite.SuiteName, "tests", len(sr.Results), "duration", sr.Duration)
@@ -226,7 +244,7 @@ func formatEntry(entry map[string]any) string {
 	return strings.Join(parts, ", ")
 }
 
-func runTest(et expandedTest, suite *dsl.Suite, opts Options, store *snapshot.Store) (tr TestResult) {
+func runTest(et expandedTest, suite *dsl.Suite, opts Options, store *snapshot.Store, sv *render.SchemaValidator) (tr TestResult) {
 	test := et.Test
 	tr = TestResult{SuiteName: suite.SuiteName, TestName: et.DisplayName}
 	start := time.Now()
@@ -263,6 +281,17 @@ func runTest(et expandedTest, suite *dsl.Suite, opts Options, store *snapshot.St
 	var allDocs []map[string]any
 	if renderResult != nil {
 		allDocs = renderResult.Docs
+	}
+
+	// Schema validation (validate tier), on by default unless --no-schema.
+	if sv != nil && renderErr == nil && len(allDocs) > 0 {
+		schemaErrs, err := sv.Validate(allDocs)
+		if err != nil {
+			tr.Failures = append(tr.Failures, fmt.Sprintf("        schema validation error: %v", err))
+		}
+		for _, se := range schemaErrs {
+			tr.Failures = append(tr.Failures, fmt.Sprintf("        schema: %s/%s: %s", se.Kind, se.Name, se.Message))
+		}
 	}
 
 	evaluateAssertions(&tr, et, suite, allDocs, renderErr, store)
