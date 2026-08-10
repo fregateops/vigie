@@ -2,9 +2,9 @@
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 
-> **Status: template tier shipped.** `vigie lint`, `vigie test` (template-tier render +
-> assertions), and `vigie schema` work end to end. The `validate` and `test-apply` cluster
-> tiers are on the [roadmap](#roadmap).
+> **Status: template + validate tiers shipped.** `vigie lint`, `vigie test` (template-tier
+> render + assertions), `vigie validate` (kubeconform), and `vigie schema` work end to end.
+> The `test-apply` cluster tiers are on the [roadmap](#roadmap).
 
 A single CLI and declarative YAML DSL for testing Helm charts across progressively
 higher-fidelity tiers — from fast in-process template rendering to full end-to-end cluster
@@ -18,7 +18,7 @@ tests. Helm is used as a **library**, never shelled out.
 |---|---|---|---|
 | `lint` | Static analysis | Chart hygiene, Chart.yaml, deprecations | ✅ shipped |
 | `test` (template) | `helm template` in-process + assertions | Go template logic produces the expected YAML | ✅ shipped |
-| `validate` | template + kubeconform | Rendered YAML is structurally valid Kubernetes | 🔜 planned |
+| `validate` | template + kubeconform | Rendered YAML is structurally valid Kubernetes | ✅ shipped |
 | `test-apply api` | envtest (real apiserver + etcd) | The API server accepts the resources | 🔜 planned |
 | `test-apply simulated` | envtest + controllers + kwok | Controllers reconcile, Pods start | 🔜 planned |
 | `test-apply e2e` | k3d / kind / external cluster | Workloads run, real network and probes | 🔜 planned |
@@ -95,6 +95,36 @@ Tests: 2 total, 2 passed (2ms total test time)
 A complete, realistic example chart lives in
 [`testdata/charts/basic`](./testdata/charts/basic) — its `tests/unit/` suite exercises the
 full matcher library, `matrix`/`cases`, helper (`call:`) tests, and snapshots.
+
+---
+
+## Validate
+
+`vigie validate` is a chart-level smoke check that needs **no test files**. It renders the
+chart with the baseline `values.yaml` plus any overlays you pass (`helm -f` semantics), then
+runs [kubeconform](https://github.com/yannh/kubeconform) over the rendered manifests to prove
+they are structurally valid Kubernetes for a given API version. Each `(overlay × kubeVersion)`
+pair runs as an independent scenario.
+
+```sh
+# Baseline render against the default Kubernetes version (1.36.1)
+vigie validate ./mychart
+
+# Layer production values and validate across two Kubernetes versions
+vigie validate ./mychart --values values-prod.yaml --kube-version 1.33.0,1.36.1
+```
+
+```
+validate: values.yaml  (140ms)
+────────────────────────────────────────────────────────────
+  PASS  k8s 1.36.1  (140ms)
+
+────────────────────────────────────────────────────────────
+Tests: 1 total, 1 passed (140ms total test time)
+```
+
+Overlays, kube versions, `--set*` overrides, and per-finding `ignore` rules can also be set
+under a `validate:` block in `.vigie.yaml` so CI and local runs stay consistent.
 
 ---
 
@@ -265,10 +295,15 @@ vigie test <chart>            template tier: render + assert (tests/unit/*_test.
   --snapshot-dir <dir>        snapshot directory (default: <chart>/tests/snapshots)
   --pass-on-warning           exit 0 on run warnings, e.g. no tests executed (default: exit 5)
 
+vigie validate <chart>        chart tier: render values.yaml + overlays, validate with kubeconform
+  --values <a.yaml,b.yaml>    value overlays (helm -f); each runs as an independent scenario
+  --kube-version <a,b>        Kubernetes versions to validate against (default: 1.36.1)
+  --set / --set-json / --set-literal <k=v>   value overrides (helm semantics)
+
 vigie schema                  print the test-file JSON Schema
 ```
 
-Global flags: `-o, --output pretty|junit` · `-p, --parallelism <n>` · `-v` debug / `-vv` trace.
+Global flags: `-o, --output pretty|junit|sarif|tap` · `-p, --parallelism <n>` · `-v` debug / `-vv` trace.
 
 Exit codes: `0` pass · `1` test failure · `2` setup error · `3` user error · `4` infra error ·
 `5` warnings (e.g. no tests executed; suppress with `--pass-on-warning`).
@@ -291,6 +326,13 @@ lint:
   ruleSets: [chart-yaml, template-best-practices, deprecation]
   disableRules:
     - template-best-practices_missing-resource-limits
+
+validate:
+  valuesFiles: [values-prod.yaml]   # overlays to render + validate
+  kubeVersions: [1.36.1]
+  ignore:
+    - kind: Ingress                 # suppress a known kubeconform finding
+      messageRegex: "networking.k8s.io/v1"
 
 test:
   testsDir: tests/unit
