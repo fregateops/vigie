@@ -1,6 +1,15 @@
 # Changelog
 
 All notable changes to this project are documented in this file.
+## [0.4.0] - 2026-08-10
+
+### Features
+
+- *(validate)* Add kubeconform validator
+- *(report)* Add SARIF 2.1.0 and TAP v13 report format support
+- *(validate)* Add validate command with doc
+- *(test)* Run kubeconform per test by default
+
 ## [0.3.0] - 2026-08-09
 
 ### Features
