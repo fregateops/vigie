@@ -1,0 +1,21 @@
+- id: vigie-lint
+  name: vigie lint
+  description: >
+    Lint a Helm chart with vigie (chart-yaml, template best-practices,
+    deprecation rules). Defaults to the current directory; set args to override.
+  language: golang
+  entry: vigie lint
+  args: [.]
+  pass_filenames: false
+  types_or: [yaml, json]
+
+- id: vigie-unit
+  name: vigie unit tests
+  description: >
+    Run the vigie unit-test suite (template render + assertions). Defaults to
+    the current directory; set args to override.
+  language: golang
+  entry: vigie test
+  args: [.]
+  pass_filenames: false
+  types_or: [yaml, json]
