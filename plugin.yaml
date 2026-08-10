@@ -1,0 +1,36 @@
+name: vigie
+version: "0.0.0"
+usage: "Helm chart testing : lint, validate, and unit-test Helm charts"
+description: |-
+  vigie is a unified CLI for testing Helm charts across multiple fidelity tiers:
+    - lint:       static analysis (chart-yaml, best-practices, deprecation rules)
+    - validate:   helm template + kubeconform (chart-level)
+    - test:       in-process helm template + declarative YAML assertions + kubeconform
+ignoreFlags: false
+command: ""
+platformCommand:
+  - os: linux
+    arch: amd64
+    command: "$HELM_PLUGIN_DIR/bin/vigie_linux_amd64"
+  - os: linux
+    arch: arm64
+    command: "$HELM_PLUGIN_DIR/bin/vigie_linux_arm64"
+  - os: darwin
+    arch: amd64
+    command: "$HELM_PLUGIN_DIR/bin/vigie_darwin_amd64"
+  - os: darwin
+    arch: arm64
+    command: "$HELM_PLUGIN_DIR/bin/vigie_darwin_arm64"
+  - os: windows
+    arch: amd64
+    command: "$HELM_PLUGIN_DIR/bin/vigie_windows_amd64.exe"
+  - os: windows
+    arch: arm64
+    command: "$HELM_PLUGIN_DIR/bin/vigie_windows_arm64.exe"
+hooks:
+  install: "scripts/install.sh"
+  update: "scripts/install.sh"
+platformHooks:
+  - os: windows
+    install: "powershell -ExecutionPolicy Bypass -File scripts/install.ps1"
+    update: "powershell -ExecutionPolicy Bypass -File scripts/install.ps1"
