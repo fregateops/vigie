@@ -9,12 +9,16 @@ import (
 
 // selectReporter maps the --output format to a reporter. Every reporter
 // handles both test results and lint findings, so the same switch serves
-// `vigie test` and `vigie lint`. sarif and tap land in M4; unknown formats
-// fall back to pretty.
+// `vigie test`, `vigie validate`, and `vigie lint`. Unknown formats fall back
+// to pretty.
 func selectReporter(format string, out io.Writer, ciKind cienv.Kind) report.Reporter {
 	switch format {
 	case "junit":
 		return &report.JUnitReporter{Out: out}
+	case "sarif":
+		return &report.SARIFReporter{Out: out}
+	case "tap":
+		return &report.TAPReporter{Out: out}
 	default:
 		return &report.PrettyReporter{Out: out, CI: ciKind}
 	}

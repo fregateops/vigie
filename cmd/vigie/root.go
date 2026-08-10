@@ -33,7 +33,7 @@ func init() {
 	rootCmd.Version = version.Version
 	rootCmd.PersistentFlags().CountVarP(&flagVerbose, "verbose", "v", "Increase verbosity: -v debug, -vv trace (logs go to stderr)")
 	rootCmd.PersistentFlags().IntVarP(&flagParallelism, "parallelism", "p", runtime.NumCPU(), "Number of parallel tests")
-	rootCmd.PersistentFlags().StringVarP(&flagOutput, "output", "o", "pretty", "Output format: pretty, junit")
+	rootCmd.PersistentFlags().StringVarP(&flagOutput, "output", "o", "pretty", "Output format: pretty, junit, sarif, tap")
 }
 
 // exitErr prints a formatted message to stderr and exits with code.
