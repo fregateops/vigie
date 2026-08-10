@@ -29,3 +29,27 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.11.4
+
+  smoke-cli:
+    name: smoke CLI (testdata chart)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: build vigie
+        run: go build -o vigie ./cmd/vigie
+
+      - name: lint
+        run: ./vigie lint testdata/charts/basic
+
+      - name: validate (baseline)
+        run: ./vigie validate testdata/charts/basic
+
+      - name: test (unit tier)
+        run: ./vigie test testdata/charts/basic
