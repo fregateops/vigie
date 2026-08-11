@@ -8,6 +8,7 @@ import (
 	"github.com/fregateops/vigie/internal/dsl"
 	"github.com/fregateops/vigie/internal/path"
 	"github.com/fregateops/vigie/internal/snapshot"
+	"k8s.io/client-go/rest"
 )
 
 // Result is the outcome of evaluating a single assertion.
@@ -17,10 +18,6 @@ type Result struct {
 }
 
 // EvalContext carries the data available to matchers.
-//
-// The apply-tier fields (InApplyTier/ApplyError/RESTConfig/Namespace, used by
-// applies/rejected and the live-cluster matchers) are added back when those
-// slices land.
 type EvalContext struct {
 	// Docs is the full set of rendered YAML documents for the test.
 	Docs []map[string]any
@@ -44,10 +41,24 @@ type EvalContext struct {
 	TestName string
 	// AssertIdx is the index of the assertion within the test (used for snapshot keys).
 	AssertIdx int
+	// InApplyTier is true when the test runs against a live API server (test-apply api or higher).
+	// applies/rejected matchers require this to be true.
+	InApplyTier bool
+	// ApplyError is non-nil when the helm install rejected the resource; nil means accepted.
+	// Only meaningful when InApplyTier is true.
+	ApplyError error
+	// RESTConfig is the Kubernetes REST client config used by apply-tier matchers.
+	// Must be non-nil when InApplyTier is true and live-cluster matchers are used.
+	RESTConfig *rest.Config
+	// Namespace is the per-test namespace the chart was installed into.
+	// Live-cluster matchers (waitFor, becomesReady, lookup, logsContain,
+	// eventEmitted, http) fall back to this when their spec doesn't pin one,
+	// so tests don't have to know the dynamically-allocated namespace name.
+	Namespace string
 }
 
 // Evaluate runs a single assertion against ctx and returns its result. The
-// concrete matcher is resolved through the registry — each matcher file
+// concrete matcher is resolved through the registry - each matcher file
 // (equal.go, http.go, …) registers its implementation from init(). Negation
 // is applied here so individual matchers don't have to care about a.Not.
 func Evaluate(a dsl.Assertion, ctx EvalContext) Result {
@@ -93,6 +104,16 @@ func resolveDocValue(ctx EvalContext, p string, matcherName string) (any, bool, 
 		return nil, false, fmt.Errorf("%s: path %q not found", matcherName, p)
 	}
 	return val, true, nil
+}
+
+// resolveNS returns specNS when non-empty, otherwise ctx.Namespace.
+// Apply-tier matchers use this so tests can omit an explicit namespace
+// and still target the per-test namespace the runner allocated.
+func resolveNS(specNS string, ctx EvalContext) string {
+	if specNS != "" {
+		return specNS
+	}
+	return ctx.Namespace
 }
 
 // deepEqual compares two values, normalizing numeric types for YAML compatibility.
