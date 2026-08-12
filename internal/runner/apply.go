@@ -52,6 +52,8 @@ type ApplyOptions struct {
 	// SnapshotDir lets callers override where snapshot files live. Empty
 	// defaults to <ChartPath>/tests/snapshots.
 	SnapshotDir string
+	// SnapshotUpdate overwrites snapshots on mismatch instead of failing.
+	SnapshotUpdate bool
 	// FailFast cancels queued tests after the first test failure. In-flight
 	// tests run to completion and clean up.
 	FailFast bool
@@ -208,7 +210,7 @@ func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult
 		return SuiteResult{File: filePath, Suite: suite.SuiteName}, fmt.Errorf("setup error: loading chart %s: %w", r.opts.ChartPath, err)
 	}
 
-	store := &snapshot.Store{Dir: resolveSnapshotDir(r.opts.SnapshotDir, r.opts.ChartPath)}
+	store := &snapshot.Store{Dir: resolveSnapshotDir(r.opts.SnapshotDir, r.opts.ChartPath), Update: r.opts.SnapshotUpdate}
 
 	clog.Progress("test-apply: %s — %d test(s)", suite.SuiteName, len(expanded))
 

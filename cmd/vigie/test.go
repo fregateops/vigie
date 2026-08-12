@@ -15,16 +15,18 @@ import (
 )
 
 var (
-	flagTestFile          string
-	flagTestTestsDir      string
-	flagTestSnapshotDir   string
-	flagTestPassOnWarning bool
-	flagTestNoSchema      bool
-	flagTestKubeVersion   string
-	flagTestCluster       string
-	flagTestKubeconfig    string
-	flagTestFailFast      bool
-	flagTestKeepCluster   bool
+	flagTestFile            string
+	flagTestTestsDir        string
+	flagTestSnapshotDir     string
+	flagTestPassOnWarning   bool
+	flagTestNoSchema        bool
+	flagTestKubeVersion     string
+	flagTestCluster         string
+	flagTestKubeconfig      string
+	flagTestFailFast        bool
+	flagTestKeepCluster     bool
+	flagTestMatch           string
+	flagTestUpdateSnapshots bool
 )
 
 // clusterNone is the default --cluster value: run the in-process template tier
@@ -66,8 +68,10 @@ func init() {
 	testCmd.Flags().StringVar(&flagTestKubeVersion, "kube-version", "", "Kubernetes version: kubeconform pass (template tier) or cluster backend version (default: 1.36.1)")
 	testCmd.Flags().StringVar(&flagTestCluster, "cluster", clusterNone, "Cluster backend for the apply tier: none|envtest|simulated|kind|k3d|kubeconfig (default none = template tier)")
 	testCmd.Flags().StringVar(&flagTestKubeconfig, "kubeconfig", "", "Path to kubeconfig for --cluster kubeconfig (overrides testApply.cluster.kubeconfig)")
-	testCmd.Flags().BoolVar(&flagTestFailFast, "fail-fast", false, "Cancel queued tests after the first failure (cluster tiers)")
+	testCmd.Flags().BoolVar(&flagTestFailFast, "fail-fast", false, "Cancel queued tests after the first failure")
 	testCmd.Flags().BoolVar(&flagTestKeepCluster, "keep-cluster", false, "Keep the cluster running after the suite for debugging (node-backed backends only)")
+	testCmd.Flags().StringVar(&flagTestMatch, "match", "", "Run only tests whose display name matches this regex")
+	testCmd.Flags().BoolVarP(&flagTestUpdateSnapshots, "update-snapshots", "u", false, "Update snapshots on mismatch instead of failing")
 	rootCmd.AddCommand(testCmd)
 }
 
@@ -156,8 +160,11 @@ func runTests(ctx context.Context, chartPath string, cfg *config.Config, files [
 			Parallelism:     flagParallelism,
 			Cfg:             cfg,
 			SnapshotDir:     flagTestSnapshotDir,
+			SnapshotUpdate:  flagTestUpdateSnapshots,
 			ValidateSchemas: !skipSchema,
 			KubeVersion:     kubeVersion,
+			Match:           flagTestMatch,
+			FailFast:        flagTestFailFast,
 		})
 	}
 
@@ -169,15 +176,17 @@ func runTests(ctx context.Context, chartPath string, cfg *config.Config, files [
 		exitErr(3, "configuring cluster backend: %v", err)
 	}
 	return runner.RunApply(ctx, runner.ApplyOptions{
-		ChartPath:   chartPath,
-		TestFiles:   files,
-		Parallelism: flagParallelism,
-		Cfg:         cfg,
-		Backend:     backend,
-		BackendType: clusterCfg.Type,
-		SnapshotDir: flagTestSnapshotDir,
-		FailFast:    flagTestFailFast,
-		KeepCluster: flagTestKeepCluster,
+		ChartPath:      chartPath,
+		TestFiles:      files,
+		Parallelism:    flagParallelism,
+		Cfg:            cfg,
+		Backend:        backend,
+		BackendType:    clusterCfg.Type,
+		SnapshotDir:    flagTestSnapshotDir,
+		SnapshotUpdate: flagTestUpdateSnapshots,
+		Match:          flagTestMatch,
+		FailFast:       flagTestFailFast,
+		KeepCluster:    flagTestKeepCluster,
 	})
 }
 

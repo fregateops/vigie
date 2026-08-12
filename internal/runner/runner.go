@@ -1,13 +1,16 @@
 package runner
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -51,6 +54,12 @@ type Options struct {
 	SnapshotUpdate  bool
 	ValidateSchemas bool   // when true, kubeconform-validate each test's rendered docs
 	KubeVersion     string // kubernetes version for schema validation; empty = config.DefaultKubeVersion
+	// Match is a regex evaluated against expanded test display names. Empty
+	// runs every discovered test.
+	Match string
+	// FailFast cancels queued files after the first test failure. In-flight
+	// files run to completion.
+	FailFast bool
 }
 
 // resolveSnapshotDir returns the snapshot directory: the explicit override
@@ -90,12 +99,38 @@ func Run(opts Options) ([]SuiteResult, error) {
 		slog.Debug("schema validator ready", "kubeVersion", kubeVer)
 	}
 
+	matchRE, err := compileMatchRegex(opts.Match)
+	if err != nil {
+		return nil, err
+	}
+
+	// Fail-fast cancels files not yet started once any file reports a failure;
+	// in-flight files still run to completion. Template runs are CPU-only, so
+	// the context only gates the queue, not the render itself.
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	defer cancelRun()
+	var failFastOnce sync.Once
+
 	return runParallel(opts.TestFiles, opts.Parallelism, func(_ int, path string) (SuiteResult, error) {
-		return runFile(path, opts, schemaValidator)
+		select {
+		case <-runCtx.Done():
+			slog.Debug("test: file cancelled (fail-fast)", "file", path)
+			return SuiteResult{File: path}, nil
+		default:
+		}
+
+		sr, fileErr := runFile(path, opts, schemaValidator, matchRE)
+		if opts.FailFast && fileErr == nil && SuiteHasFailure(sr) {
+			failFastOnce.Do(func() {
+				slog.Debug("test: fail-fast triggered", "file", path)
+				cancelRun()
+			})
+		}
+		return sr, fileErr
 	})
 }
 
-func runFile(filePath string, opts Options, sv *render.SchemaValidator) (SuiteResult, error) {
+func runFile(filePath string, opts Options, sv *render.SchemaValidator, matchRE *regexp.Regexp) (SuiteResult, error) {
 	slog.Debug("loading test file", "file", filePath)
 	start := time.Now()
 
@@ -118,6 +153,10 @@ func runFile(filePath string, opts Options, sv *render.SchemaValidator) (SuiteRe
 	store := &snapshot.Store{Dir: resolveSnapshotDir(opts.SnapshotDir, opts.ChartPath), Update: opts.SnapshotUpdate}
 
 	for _, et := range expanded {
+		if matchRE != nil && !matchRE.MatchString(et.DisplayName) {
+			slog.Debug("skipping test (no match)", "test", et.DisplayName)
+			continue
+		}
 		sr.Results = append(sr.Results, runTest(et, suite, opts, store, sv))
 	}
 	sr.Duration = time.Since(start)
