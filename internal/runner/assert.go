@@ -4,19 +4,31 @@ import (
 	"fmt"
 	"strings"
 
+	"k8s.io/client-go/rest"
+
 	"github.com/fregateops/vigie/internal/clog"
 	"github.com/fregateops/vigie/internal/dsl"
 	"github.com/fregateops/vigie/internal/matchers"
 	"github.com/fregateops/vigie/internal/snapshot"
 )
 
+// applyEvalExtras carries the apply-tier-only EvalContext fields. The template
+// tier passes the zero value (no apply context); the apply tier fills them in.
+type applyEvalExtras struct {
+	InApplyTier bool
+	ApplyError  error
+	RESTConfig  *rest.Config
+	Namespace   string
+}
+
 // evaluateAssertions runs a test's assertion list against the rendered docs,
-// appending any failures to tr.Failures. The apply-tier extras (live-cluster
-// context) are threaded back in when those slices land.
+// appending any failures to tr.Failures. It is shared by the template tier
+// (runTest) and the apply tier (apply.go); extras carries the apply-only
+// EvalContext fields and is the zero value for the template tier.
 //
-// It does not set tr.Pass — callers decide that from len(tr.Failures) after
-// any tier-specific pre-checks have also run.
-func evaluateAssertions(tr *TestResult, et expandedTest, suite *dsl.Suite, allDocs []map[string]any, renderErr error, store *snapshot.Store) {
+// It does not set tr.Pass - callers decide that from len(tr.Failures) after
+// any tier-specific pre-checks (e.g. schema validation) have also run.
+func evaluateAssertions(tr *TestResult, et expandedTest, suite *dsl.Suite, allDocs []map[string]any, renderErr error, store *snapshot.Store, extras applyEvalExtras) {
 	test := et.Test
 
 	evalContext := func(doc map[string]any, assertIdx int) matchers.EvalContext {
@@ -30,6 +42,10 @@ func evaluateAssertions(tr *TestResult, et expandedTest, suite *dsl.Suite, allDo
 			SuiteName:     suite.SuiteName,
 			TestName:      et.DisplayName,
 			AssertIdx:     assertIdx,
+			InApplyTier:   extras.InApplyTier,
+			ApplyError:    extras.ApplyError,
+			RESTConfig:    extras.RESTConfig,
+			Namespace:     extras.Namespace,
 		}
 	}
 

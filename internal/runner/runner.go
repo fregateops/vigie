@@ -294,7 +294,7 @@ func runTest(et expandedTest, suite *dsl.Suite, opts Options, store *snapshot.St
 		}
 	}
 
-	evaluateAssertions(&tr, et, suite, allDocs, renderErr, store)
+	evaluateAssertions(&tr, et, suite, allDocs, renderErr, store, applyEvalExtras{})
 
 	tr.Pass = len(tr.Failures) == 0
 	return tr
