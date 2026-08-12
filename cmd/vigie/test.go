@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/fregateops/vigie/internal/cienv"
+	"github.com/fregateops/vigie/internal/cluster"
 	"github.com/fregateops/vigie/internal/config"
 	"github.com/fregateops/vigie/internal/runner"
 	"github.com/spf13/cobra"
@@ -19,19 +21,35 @@ var (
 	flagTestPassOnWarning bool
 	flagTestNoSchema      bool
 	flagTestKubeVersion   string
+	flagTestCluster       string
+	flagTestKubeconfig    string
+	flagTestFailFast      bool
+	flagTestKeepCluster   bool
 )
 
+// clusterNone is the default --cluster value: run the in-process template tier
+// (render + assert + kubeconform), no cluster backend.
+const clusterNone = "none"
+
 // exitWarnings is the exit code for a run that produced only warnings (e.g. no
-// tests executed) — distinct from setup (2)/user (3) errors so CI can tell
+// tests executed) - distinct from setup (2)/user (3) errors so CI can tell
 // "your chart has no tests" apart from "the tool broke". Mirrors pytest's
 // dedicated "no tests collected" code.
 const exitWarnings = 5
 
 var testCmd = &cobra.Command{
 	Use:   "test <chart>",
-	Short: "Render templates per test and run user assertions",
-	Example: `  # Run every tests/unit/*_test.yaml under the chart
+	Short: "Render templates per test and run user assertions (optionally against a cluster)",
+	Long: "Run a chart's tests. By default (--cluster none) templates are rendered in-process\n" +
+		"and assertions run against the rendered manifests. Pass --cluster to install each\n" +
+		"test's chart into a real control plane and assert against the live objects:\n\n" +
+		"  envtest  real kube-apiserver + etcd, no controllers (fast, dependency-free)\n\n" +
+		"simulated, kind, k3d, and kubeconfig arrive in later releases.",
+	Example: `  # Template tier: render every tests/*_test.yaml under the chart
   vigie test ./mychart
+
+  # Apply tier: install each test against an in-process apiserver (envtest)
+  vigie test ./mychart --cluster envtest
 
   # Run a single test file and emit JUnit for CI
   vigie test ./mychart --file tests/unit/deployment_test.yaml -o junit`,
@@ -44,15 +62,20 @@ func init() {
 	testCmd.Flags().StringVar(&flagTestTestsDir, "tests", "", "Directory to scan recursively for *_test.yaml (overrides test.testsDir; default: <chart>/tests)")
 	testCmd.Flags().StringVar(&flagTestSnapshotDir, "snapshot-dir", "", "Directory for snapshot files (default: <chart>/tests/snapshots)")
 	testCmd.Flags().BoolVar(&flagTestPassOnWarning, "pass-on-warning", false, "Exit 0 on run warnings such as no tests executed (default: exit 5)")
-	testCmd.Flags().BoolVar(&flagTestNoSchema, "no-schema", false, "Skip the per-test kubeconform pass (on by default)")
-	testCmd.Flags().StringVar(&flagTestKubeVersion, "kube-version", "", "Kubernetes version for the per-test kubeconform pass (default: 1.36.1)")
+	testCmd.Flags().BoolVar(&flagTestNoSchema, "no-schema", false, "Skip the per-test kubeconform pass (template tier; on by default)")
+	testCmd.Flags().StringVar(&flagTestKubeVersion, "kube-version", "", "Kubernetes version: kubeconform pass (template tier) or cluster backend version (default: 1.36.1)")
+	testCmd.Flags().StringVar(&flagTestCluster, "cluster", clusterNone, "Cluster backend for the apply tier: none|envtest|simulated|kind|k3d|kubeconfig (default none = template tier)")
+	testCmd.Flags().StringVar(&flagTestKubeconfig, "kubeconfig", "", "Path to kubeconfig for --cluster kubeconfig (overrides testApply.cluster.kubeconfig)")
+	testCmd.Flags().BoolVar(&flagTestFailFast, "fail-fast", false, "Cancel queued tests after the first failure (cluster tiers)")
+	testCmd.Flags().BoolVar(&flagTestKeepCluster, "keep-cluster", false, "Keep the cluster running after the suite for debugging (node-backed backends only)")
 	rootCmd.AddCommand(testCmd)
 }
 
 func runTestCmd(cmd *cobra.Command, args []string) error {
 	chartPath := args[0]
 
-	slog.Debug("invoked", "command", "test", "chart", chartPath, "parallelism", flagParallelism)
+	slog.Debug("invoked", "command", "test", "chart", chartPath,
+		"cluster", flagTestCluster, "parallelism", flagParallelism)
 
 	if err := config.ValidateKubeVersion("--kube-version", flagTestKubeVersion); err != nil {
 		exitErr(3, "%v", err)
@@ -65,14 +88,9 @@ func runTestCmd(cmd *cobra.Command, args []string) error {
 	slog.Debug("loaded config", "release", cfg.Defaults.Release.Name, "namespace", cfg.Defaults.Release.Namespace)
 
 	testsDir := resolveTestsDir(flagTestTestsDir, cfg.Test.TestsDir)
-	var files []string
-	if flagTestFile != "" {
-		files = []string{flagTestFile}
-	} else {
-		files, err = runner.DiscoverTestFiles(chartPath, testsDir)
-		if err != nil {
-			exitErr(2, "discovering test files: %v", err)
-		}
+	files, err := discoverTests(chartPath, testsDir)
+	if err != nil {
+		exitErr(2, "discovering test files: %v", err)
 	}
 	slog.Debug("discovered test files", "count", len(files), "testsDir", testsDir)
 
@@ -82,26 +100,9 @@ func runTestCmd(cmd *cobra.Command, args []string) error {
 	var warnings []string
 
 	if len(files) == 0 {
-		warnings = append(warnings, fmt.Sprintf("no unit test files found under %s", displayTestsRoot(chartPath, testsDir)))
+		warnings = append(warnings, fmt.Sprintf("no test files found under %s", displayTestsRoot(chartPath, testsDir)))
 	} else {
-		// Schema validation is on by default; --no-schema or test.skipSchema disables it.
-		skipSchema := flagTestNoSchema || cfg.Test.SkipSchema
-		kubeVersion := flagTestKubeVersion
-		if kubeVersion == "" && len(cfg.Test.KubeVersions) > 0 {
-			kubeVersion = cfg.Test.KubeVersions[0]
-		}
-
-		opts := runner.Options{
-			ChartPath:       chartPath,
-			TestFiles:       files,
-			Parallelism:     flagParallelism,
-			Cfg:             cfg,
-			SnapshotDir:     flagTestSnapshotDir,
-			ValidateSchemas: !skipSchema,
-			KubeVersion:     kubeVersion,
-		}
-
-		results, err := runner.Run(opts)
+		results, err := runTests(cmd.Context(), chartPath, cfg, files)
 		if err != nil {
 			exitErr(2, "%v", err)
 		}
@@ -119,13 +120,96 @@ func runTestCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	emitWarnings(warnings)
+	return nil
+}
+
+// discoverTests resolves the test-file list for the active tier. A single
+// --file short-circuits discovery; otherwise the apply tier accepts both unit
+// and integration suite shapes (DiscoverApplyTestFiles) while the template tier
+// takes unit files only.
+func discoverTests(chartPath, testsDir string) ([]string, error) {
+	if flagTestFile != "" {
+		return []string{flagTestFile}, nil
+	}
+	if flagTestCluster != clusterNone {
+		return runner.DiscoverApplyTestFiles(chartPath, testsDir)
+	}
+	return runner.DiscoverTestFiles(chartPath, testsDir)
+}
+
+// runTests executes the discovered files under the active tier and returns the
+// shared []runner.SuiteResult: the in-process template tier (--cluster none,
+// render + assert + kubeconform) or the apply tier, which installs each test
+// against the selected live cluster backend.
+func runTests(ctx context.Context, chartPath string, cfg *config.Config, files []string) ([]runner.SuiteResult, error) {
+	if flagTestCluster == clusterNone {
+		// Schema validation is on by default; --no-schema or test.skipSchema disables it.
+		skipSchema := flagTestNoSchema || cfg.Test.SkipSchema
+		kubeVersion := flagTestKubeVersion
+		if kubeVersion == "" && len(cfg.Test.KubeVersions) > 0 {
+			kubeVersion = cfg.Test.KubeVersions[0]
+		}
+		return runner.Run(runner.Options{
+			ChartPath:       chartPath,
+			TestFiles:       files,
+			Parallelism:     flagParallelism,
+			Cfg:             cfg,
+			SnapshotDir:     flagTestSnapshotDir,
+			ValidateSchemas: !skipSchema,
+			KubeVersion:     kubeVersion,
+		})
+	}
+
+	clusterCfg := resolveClusterConfig(cfg)
+	slog.Debug("cluster test", "backend", clusterCfg.Type,
+		"kubeVersion", clusterCfg.KubeVersion, "kubeconfig", clusterCfg.Kubeconfig)
+	backend, err := cluster.New(clusterCfg)
+	if err != nil {
+		exitErr(3, "configuring cluster backend: %v", err)
+	}
+	return runner.RunApply(ctx, runner.ApplyOptions{
+		ChartPath:   chartPath,
+		TestFiles:   files,
+		Parallelism: flagParallelism,
+		Cfg:         cfg,
+		Backend:     backend,
+		BackendType: clusterCfg.Type,
+		SnapshotDir: flagTestSnapshotDir,
+		FailFast:    flagTestFailFast,
+		KeepCluster: flagTestKeepCluster,
+	})
+}
+
+// resolveClusterConfig builds the cluster.Config from the --cluster flag,
+// layering --kube-version / --kubeconfig over the chart's testApply.cluster
+// settings. The backend type comes from the flag (already known to be a real
+// backend, not "none").
+func resolveClusterConfig(cfg *config.Config) cluster.Config {
+	configured := cfg.TestApply.Cluster
+	resolved := cluster.Config{
+		Type:        flagTestCluster,
+		KubeVersion: configured.KubeVersion,
+		Kubeconfig:  configured.Kubeconfig,
+	}
+	if flagTestKubeVersion != "" {
+		resolved.KubeVersion = flagTestKubeVersion
+	}
+	if flagTestKubeconfig != "" {
+		resolved.Kubeconfig = flagTestKubeconfig
+	}
+	return resolved
+}
+
+// emitWarnings prints run warnings to stderr and exits with exitWarnings unless
+// --pass-on-warning is set.
+func emitWarnings(warnings []string) {
 	for _, w := range warnings {
 		fmt.Fprintf(os.Stderr, "vigie: warning: %s\n", w)
 	}
 	if len(warnings) > 0 && !flagTestPassOnWarning {
 		os.Exit(exitWarnings)
 	}
-	return nil
 }
 
 // countTestCases totals the executed test cases across all suites.

@@ -53,3 +53,19 @@ jobs:
 
       - name: test (unit tier)
         run: ./vigie test testdata/charts/basic
+      
+      - name: provision envtest binaries
+        # setup-envtest is pinned via go.mod (go run resolves that version), so
+        # the downloaded kube-apiserver/etcd match the controller-runtime we use.
+        # KUBEBUILDER_ASSETS is honoured first by the envtest backend, so this
+        # pins the control-plane version for both the CLI and the tagged tests.
+        run: |
+          ASSETS=$(go run sigs.k8s.io/controller-runtime/tools/setup-envtest use 1.30 -p path)
+          echo "resolved envtest assets: $ASSETS"
+          echo "KUBEBUILDER_ASSETS=$ASSETS" >> "$GITHUB_ENV"
+
+      - name: test (apply tier, envtest)
+        run: ./vigie test testdata/charts/basic --cluster envtest
+
+      - name: integration tests (envtest)
+        run: go test -tags envtest ./...
