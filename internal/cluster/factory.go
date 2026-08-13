@@ -7,7 +7,7 @@ import (
 )
 
 // DefaultType is the cluster backend used when Config.Type is empty.
-// envtest is fast, dependency-free, and matches the `test-apply api`
+// envtest is fast, dependency-free, and matches the `--cluster envtest`
 // default - making it the friendliest landing spot for new users.
 const DefaultType = "envtest"
 

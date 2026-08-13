@@ -33,9 +33,10 @@ import (
 	"github.com/fregateops/vigie/internal/snapshot"
 )
 
-// ApplyOptions configures `vigie test-apply`. The caller is responsible for
-// constructing Backend (via cluster.New); BackendType records which Config
-// backend value was resolved so the runner can honour tier filters.
+// ApplyOptions configures the apply tier of `vigie test` (--cluster). The
+// caller is responsible for constructing Backend (via cluster.New); BackendType
+// records which Config backend value was resolved so the runner can honour tier
+// filters.
 type ApplyOptions struct {
 	ChartPath   string
 	TestFiles   []string
@@ -62,8 +63,8 @@ type ApplyOptions struct {
 	KeepCluster bool
 }
 
-// RunApply executes `vigie test-apply`: it starts the configured cluster
-// backend, walks each test file through the apply-tier state machine
+// RunApply runs the apply tier of `vigie test --cluster`: it starts the
+// configured cluster backend, walks each test file through the apply-tier state machine
 // (LOAD -> EXPAND -> EXECUTE -> REPORT), then stops the backend (unless
 // KeepCluster). The api tier (envtest) installs each test's chart against a
 // real apiserver and evaluates the assertions; dependencies and lifecycle
@@ -86,7 +87,7 @@ func RunApply(ctx context.Context, opts ApplyOptions) ([]SuiteResult, error) {
 		return nil, errors.New("setup error: ApplyOptions.Backend is nil")
 	}
 
-	clog.Progress("test-apply: starting %s backend (this may take a moment)", opts.BackendType)
+	clog.Progress("apply: starting %s backend (this may take a moment)", opts.BackendType)
 	if err := opts.Backend.Start(ctx); err != nil {
 		return nil, fmt.Errorf("setup error: starting %s backend: %w", opts.BackendType, err)
 	}
@@ -103,9 +104,9 @@ func RunApply(ctx context.Context, opts ApplyOptions) ([]SuiteResult, error) {
 	}
 
 	if kc := opts.Backend.Kubeconfig(); kc != "" {
-		clog.Progress("test-apply: backend ready (kubeconfig=%s); running %d file(s)", kc, len(opts.TestFiles))
+		clog.Progress("apply: backend ready (kubeconfig=%s); running %d file(s)", kc, len(opts.TestFiles))
 	} else {
-		clog.Progress("test-apply: backend ready; running %d file(s)", len(opts.TestFiles))
+		clog.Progress("apply: backend ready; running %d file(s)", len(opts.TestFiles))
 	}
 
 	runner := &applyRunner{
@@ -137,13 +138,13 @@ type applyRunner struct {
 func stopBackend(opts ApplyOptions) {
 	if opts.KeepCluster {
 		if kc := opts.Backend.Kubeconfig(); kc != "" {
-			clog.Progress("test-apply: --keep-cluster: leaving cluster running (kubeconfig=%s)", kc)
+			clog.Progress("apply: --keep-cluster: leaving cluster running (kubeconfig=%s)", kc)
 		} else {
-			clog.Progress("test-apply: --keep-cluster: leaving cluster running")
+			clog.Progress("apply: --keep-cluster: leaving cluster running")
 		}
 		return
 	}
-	clog.Progress("test-apply: tearing down %s backend", opts.BackendType)
+	clog.Progress("apply: tearing down %s backend", opts.BackendType)
 	stopCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	if stopErr := opts.Backend.Stop(stopCtx); stopErr != nil {
@@ -167,7 +168,7 @@ func (r *applyRunner) run(parent context.Context) ([]SuiteResult, error) {
 	return runParallel(r.opts.TestFiles, parallelism, func(_ int, path string) (SuiteResult, error) {
 		select {
 		case <-runCtx.Done():
-			slog.Debug("test-apply: file cancelled (fail-fast)", "file", path)
+			slog.Debug("apply: file cancelled (fail-fast)", "file", path)
 			return SuiteResult{File: path}, nil
 		default:
 		}
@@ -175,7 +176,7 @@ func (r *applyRunner) run(parent context.Context) ([]SuiteResult, error) {
 		sr, fileErr := r.runFile(runCtx, path)
 		if r.opts.FailFast && fileErr == nil && SuiteHasFailure(sr) {
 			failFastOnce.Do(func() {
-				slog.Debug("test-apply: fail-fast triggered", "file", path)
+				slog.Debug("apply: fail-fast triggered", "file", path)
 				cancelRun()
 			})
 		}
@@ -212,7 +213,7 @@ func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult
 
 	store := &snapshot.Store{Dir: resolveSnapshotDir(r.opts.SnapshotDir, r.opts.ChartPath), Update: r.opts.SnapshotUpdate}
 
-	clog.Progress("test-apply: %s — %d test(s)", suite.SuiteName, len(expanded))
+	clog.Progress("apply: %s — %d test(s)", suite.SuiteName, len(expanded))
 
 	for _, et := range expanded {
 		if r.matchRE != nil && !r.matchRE.MatchString(et.DisplayName) {
@@ -242,11 +243,11 @@ func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult
 			})
 			continue
 		}
-		clog.Progress("test-apply: %s — running test: %s", suite.SuiteName, et.DisplayName)
+		clog.Progress("apply: %s — running test: %s", suite.SuiteName, et.DisplayName)
 		testStart := time.Now()
 		tr := r.runTest(ctx, et, suite, chrt, store)
 		sr.Results = append(sr.Results, tr)
-		clog.Progress("test-apply: %s — %s", suite.SuiteName, formatTestProgress(tr, et.DisplayName, time.Since(testStart)))
+		clog.Progress("apply: %s — %s", suite.SuiteName, formatTestProgress(tr, et.DisplayName, time.Since(testStart)))
 	}
 	sr.Duration = time.Since(start)
 	slog.Debug("suite finished",

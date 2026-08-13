@@ -24,7 +24,7 @@ func init() {
 	})
 }
 
-const errTierMismatch = "applies/rejected matchers require test-apply (any cluster backend)"
+const errTierMismatch = "applies/rejected matchers require a cluster backend (run test with --cluster)"
 
 func evalApplies(_ *dsl.AppliesSpec, ctx EvalContext) Result {
 	if !ctx.InApplyTier {

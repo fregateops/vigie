@@ -362,7 +362,7 @@ validate:
 test:
   testsDir: tests/unit
   skipSchema: false          # kubeconform runs per test by default; true opts out
-  kubeVersions: [1.36.1]     # first entry pins the kubeconform version
+  kubeVersions: [1.36.1]     # kubeconform runs once per version (matrix)
 ```
 
 ### Lint rule sets

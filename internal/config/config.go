@@ -105,13 +105,13 @@ type TestConfig struct {
 	TestsDir string `yaml:"testsDir"`
 }
 
-// TestApplyConfig configures `vigie test-apply`. The cluster backend is
-// selected via Cluster.Type — envtest (default), simulated, kind, k3d, or
-// kubeconfig. See DESIGN.md §3 for the backend/tier mapping.
+// TestApplyConfig configures the cluster (apply) tier of `vigie test`. The
+// backend is selected via Cluster.Type — envtest (default), simulated, kind,
+// k3d, or kubeconfig — surfaced on the CLI as `vigie test --cluster <type>`.
 type TestApplyConfig struct {
-	// Cluster pins the backend `test-apply` runs against.
+	// Cluster pins the backend the apply tier runs against.
 	Cluster ClusterConfig `yaml:"cluster"`
-	// TestsDir overrides the discovery root for `vigie test-apply`.
+	// TestsDir overrides the discovery root for the apply tier.
 	// Relative paths resolve against the chart directory. Empty falls back
 	// to `<chart>/tests`. The directory is scanned recursively for
 	// `*_test.yaml`.
@@ -119,19 +119,20 @@ type TestApplyConfig struct {
 }
 
 // RunConfig controls `vigie run` — the orchestrated command that chains
-// lint → validate → test → test-apply. Lint, validate, and test always run;
-// the apply tier is opt-in via ApplyTiers because real clusters are slow.
-// Direct subcommand invocation (`vigie test-apply`) ignores this list —
-// the user already opted in by typing the subcommand.
+// lint → validate → test. Lint, validate, and the template tier always run;
+// cluster (apply) tiers are opt-in via ApplyTiers because real clusters are
+// slow. A direct `vigie test --cluster <type>` invocation ignores this list —
+// the user already opted in by passing --cluster.
 type RunConfig struct {
-	// ApplyTiers selects which `test-apply` cluster backends `vigie run`
-	// invokes. Empty/omitted means "no apply tiers — just lint+validate+test".
+	// ApplyTiers selects which cluster backends `vigie run` exercises via the
+	// apply tier. Empty/omitted means "no apply tiers — just lint+validate+test".
 	// Valid values: any cluster backend type (envtest, simulated, kind, k3d,
 	// kubeconfig).
 	ApplyTiers []string `yaml:"applyTiers"`
 }
 
-// ClusterConfig selects the cluster backend for `test-apply`. Mirrors
+// ClusterConfig selects the cluster backend for the apply tier of `vigie test`.
+// Mirrors
 // internal/cluster.Config but lives in config so charts can pin a backend in
 // `.vigie.yaml` without depending on the cluster package.
 type ClusterConfig struct {
