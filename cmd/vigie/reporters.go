@@ -13,6 +13,8 @@ import (
 // to pretty.
 func selectReporter(format string, out io.Writer, ciKind cienv.Kind) report.Reporter {
 	switch format {
+	case "json":
+		return &report.JSONReporter{Out: out}
 	case "junit":
 		return &report.JUnitReporter{Out: out}
 	case "sarif":
