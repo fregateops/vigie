@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -26,6 +27,7 @@ import (
 	"github.com/fregateops/vigie/internal/clog"
 	"github.com/fregateops/vigie/internal/cluster"
 	"github.com/fregateops/vigie/internal/config"
+	"github.com/fregateops/vigie/internal/deps"
 	"github.com/fregateops/vigie/internal/dsl"
 	"github.com/fregateops/vigie/internal/kubeclient"
 	"github.com/fregateops/vigie/internal/matchers"
@@ -36,7 +38,8 @@ import (
 // ApplyOptions configures the apply tier of `vigie test` (--cluster). The
 // caller is responsible for constructing Backend (via cluster.New); BackendType
 // records which Config backend value was resolved so the runner can honour tier
-// filters.
+// filters and gate integration-only features (deps, hooks) that some backends
+// don't support.
 type ApplyOptions struct {
 	ChartPath   string
 	TestFiles   []string
@@ -44,8 +47,9 @@ type ApplyOptions struct {
 	Cfg         *config.Config
 	// Backend is the cluster backend already constructed via cluster.New.
 	Backend cluster.Backend
-	// BackendType records the resolved backend type ("envtest", ...). Used for
-	// tier filtering and progress messages.
+	// BackendType records the resolved backend type ("envtest", "kubeconfig",
+	// ...). Used for tier filtering and to gate integration-only features that
+	// some backends do not support.
 	BackendType string
 	// Match is a regex evaluated against expanded test display names. Empty
 	// runs every discovered test.
@@ -66,9 +70,9 @@ type ApplyOptions struct {
 // RunApply runs the apply tier of `vigie test --cluster`: it starts the
 // configured cluster backend, walks each test file through the apply-tier state machine
 // (LOAD -> EXPAND -> EXECUTE -> REPORT), then stops the backend (unless
-// KeepCluster). The api tier (envtest) installs each test's chart against a
-// real apiserver and evaluates the assertions; dependencies and lifecycle
-// hooks belong to the integration tiers and are not handled here.
+// KeepCluster). Integration-only features (dependencies, lifecycle hooks) are
+// honoured only when the backend supports them; on envtest they are warned and
+// skipped.
 func RunApply(ctx context.Context, opts ApplyOptions) ([]SuiteResult, error) {
 	slog.Debug("starting apply runner",
 		"files", len(opts.TestFiles), "parallelism", opts.Parallelism,
@@ -110,12 +114,13 @@ func RunApply(ctx context.Context, opts ApplyOptions) ([]SuiteResult, error) {
 	}
 
 	runner := &applyRunner{
-		opts:       opts,
-		kubeCfg:    restCfg,
-		kubeconfig: opts.Backend.Kubeconfig(),
-		clientset:  clientset,
-		matchRE:    matchRE,
-		activeTier: backendTier(opts.BackendType),
+		opts:        opts,
+		kubeCfg:     restCfg,
+		kubeconfig:  opts.Backend.Kubeconfig(),
+		clientset:   clientset,
+		matchRE:     matchRE,
+		activeTier:  backendTier(opts.BackendType),
+		integration: backendSupportsDeps(opts.BackendType),
 	}
 
 	return runner.run(ctx)
@@ -131,6 +136,9 @@ type applyRunner struct {
 	// activeTier is the value compared against each test's `tier:` field
 	// ("apiserver" for envtest, "e2e" for real-cluster backends).
 	activeTier string
+	// integration is true when the backend supports integration-tier features
+	// (dependencies, lifecycle hooks). envtest sets this to false.
+	integration bool
 }
 
 // stopBackend honours --keep-cluster and uses a detached context so teardown
@@ -184,10 +192,11 @@ func (r *applyRunner) run(parent context.Context) ([]SuiteResult, error) {
 	})
 }
 
-// runFile is the per-file state machine: parse -> expand -> run each test
-// (with a per-test namespace) against the live backend. The api tier accepts
-// both unit and integration suite shapes but ignores integration-only fields
-// (dependencies, lifecycle hooks) - those land with the integration tiers.
+// runFile is the per-file state machine: parse -> install scoped deps ->
+// beforeAll hooks -> run tests (with per-test namespace + scope-test deps +
+// setup/teardown hooks) -> afterAll hooks -> teardown scoped deps. Suites that
+// declare no integration-tier features (no `dependencies:`/`beforeAll:`/...)
+// fall through the install + hook stages with empty payloads.
 func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult, error) {
 	slog.Debug("loading test file", "file", filePath)
 	start := time.Now()
@@ -213,7 +222,73 @@ func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult
 
 	store := &snapshot.Store{Dir: resolveSnapshotDir(r.opts.SnapshotDir, r.opts.ChartPath), Update: r.opts.SnapshotUpdate}
 
-	clog.Progress("apply: %s — %d test(s)", suite.SuiteName, len(expanded))
+	baseDir := filepath.Dir(filePath)
+
+	// Warn-and-skip integration features when the backend doesn't support them.
+	// Tests with `dependencies:` running on envtest get a heads-up but the
+	// runner doesn't fail outright - the test's assertions may still pass if
+	// they don't depend on the deps.
+	clusterDeps, suiteDeps, testDeps := splitDepsByScope(suite.Dependencies)
+	if !r.integration && (len(clusterDeps)+len(suiteDeps)+len(testDeps) > 0) {
+		slog.Warn("dependencies declared but backend does not support them — skipping",
+			"file", filePath, "backend", r.opts.BackendType,
+			"clusterDeps", len(clusterDeps), "suiteDeps", len(suiteDeps), "testDeps", len(testDeps))
+		clusterDeps, suiteDeps, testDeps = nil, nil, nil
+	}
+	if !r.integration && (len(suite.BeforeAll)+len(suite.AfterAll) > 0) {
+		slog.Warn("lifecycle hooks declared but backend does not support them — skipping",
+			"file", filePath, "backend", r.opts.BackendType)
+		suite.BeforeAll, suite.AfterAll = nil, nil
+	}
+
+	clusterState, _, err := deps.Install(ctx, clusterDeps, r.kubeCfg, deps.InstallOptions{
+		Parallelism: r.opts.Parallelism, BaseDir: baseDir,
+	})
+	if err != nil {
+		return sr, fmt.Errorf("setup error: installing cluster-scoped deps: %w", err)
+	}
+	// Cluster-scoped deps persist across files for cache reuse; their teardown
+	// will be tracked in a future change.
+	_ = clusterState
+
+	if len(suiteDeps) > 0 {
+		clog.Progress("apply: %s — installing %d suite-scoped dependency(ies)", suite.SuiteName, len(suiteDeps))
+	}
+	suiteState, suiteExports, err := deps.Install(ctx, suiteDeps, r.kubeCfg, deps.InstallOptions{
+		Parallelism: r.opts.Parallelism, BaseDir: baseDir,
+	})
+	if err != nil {
+		return sr, fmt.Errorf("setup error: installing suite-scoped deps: %w", err)
+	}
+	defer func() {
+		if r.opts.KeepCluster {
+			slog.Info("--keep-cluster: preserving suite-scoped deps", "file", filePath)
+			return
+		}
+		teardownCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		if err := deps.Teardown(teardownCtx, suiteState); err != nil {
+			slog.Warn("suite-scoped dep teardown failed", "file", filePath, "err", err)
+		}
+	}()
+
+	suiteEnv := HookEnv{
+		Kubeconfig: r.kubeconfig,
+		Suite:      suite.SuiteName,
+	}
+	if err := RunHooks(ctx, "beforeAll", suite.BeforeAll, suiteEnv); err != nil {
+		return sr, fmt.Errorf("setup error: beforeAll hook: %w", err)
+	}
+	defer func() {
+		afterCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		if err := RunHooks(afterCtx, "afterAll", suite.AfterAll, suiteEnv); err != nil {
+			slog.Warn("afterAll hook failed", "file", filePath, "err", err)
+		}
+	}()
+
+	clog.Progress("apply: %s — %d test(s), %d suite-dep(s), %d test-dep(s)",
+		suite.SuiteName, len(expanded), len(suiteDeps), len(testDeps))
 
 	for _, et := range expanded {
 		if r.matchRE != nil && !r.matchRE.MatchString(et.DisplayName) {
@@ -245,7 +320,7 @@ func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult
 		}
 		clog.Progress("apply: %s — running test: %s", suite.SuiteName, et.DisplayName)
 		testStart := time.Now()
-		tr := r.runTest(ctx, et, suite, chrt, store)
+		tr := r.runTest(ctx, et, suite, chrt, store, baseDir, testDeps, suiteExports)
 		sr.Results = append(sr.Results, tr)
 		clog.Progress("apply: %s — %s", suite.SuiteName, formatTestProgress(tr, et.DisplayName, time.Since(testStart)))
 	}
@@ -256,10 +331,10 @@ func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult
 }
 
 // runTest renders the chart, installs it into a fresh per-test namespace,
-// evaluates matchers, and tears the namespace down. Helper tests (Call != "")
-// fall back to the template-tier helper path so mixed suites still produce
-// results.
-func (r *applyRunner) runTest(ctx context.Context, et expandedTest, suite *dsl.Suite, chrt *chart.Chart, store *snapshot.Store) (tr TestResult) {
+// installs test-scoped deps, evaluates matchers, runs lifecycle hooks, and
+// tears the namespace down. Helper tests (Call != "") fall back to the
+// template-tier helper path so mixed suites still produce results.
+func (r *applyRunner) runTest(ctx context.Context, et expandedTest, suite *dsl.Suite, chrt *chart.Chart, store *snapshot.Store, baseDir string, testDeps []dsl.Dependency, suiteExports deps.ExportMap) (tr TestResult) {
 	test := et.Test
 	tr = TestResult{SuiteName: suite.SuiteName, TestName: et.DisplayName}
 	start := time.Now()
@@ -290,9 +365,53 @@ func (r *applyRunner) runTest(ctx context.Context, et expandedTest, suite *dsl.S
 	}
 	defer r.deleteNamespace(namespace)
 
+	testScopedForThis := narrowTestDepsToNamespace(testDeps, namespace)
+	testState, testExports, err := deps.Install(ctx, testScopedForThis, r.kubeCfg, deps.InstallOptions{
+		Parallelism: r.opts.Parallelism, BaseDir: baseDir,
+	})
+	if err != nil {
+		tr.Failures = append(tr.Failures, fmt.Sprintf("        → test-scoped dep install: %v", err))
+		tr.Pass = false
+		return tr
+	}
+	defer func() {
+		if r.opts.KeepCluster {
+			return
+		}
+		teardownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := deps.Teardown(teardownCtx, testState); err != nil {
+			slog.Warn("test-scoped dep teardown failed", "test", et.DisplayName, "err", err)
+		}
+	}()
+
+	mergedExports := mergeExports(suiteExports, testExports)
+
+	hookEnv := HookEnv{
+		Kubeconfig: r.kubeconfig,
+		Suite:      suite.SuiteName,
+		Test:       et.DisplayName,
+		Namespace:  namespace,
+	}
+	if r.integration {
+		if err := RunHooks(ctx, "setup", test.Setup, hookEnv); err != nil {
+			tr.Failures = append(tr.Failures, fmt.Sprintf("        → setup hook: %v", err))
+			tr.Pass = false
+			return tr
+		}
+		defer func() {
+			teardownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if err := RunHooks(teardownCtx, "teardown", test.Teardown, hookEnv); err != nil {
+				slog.Warn("teardown hook failed", "test", et.DisplayName, "err", err)
+			}
+		}()
+	}
+
 	renderOpts := Options{ChartPath: r.opts.ChartPath, Cfg: r.opts.Cfg}
 	req := buildRenderRequest(test, suite, renderOpts)
 	req.Namespace = namespace
+	req.Values = applyDepsBindings(req.Values, mergedExports)
 
 	clog.Trace("apply render request",
 		"suite", suite.SuiteName, "test", et.DisplayName,
@@ -306,7 +425,7 @@ func (r *applyRunner) runTest(ctx context.Context, et expandedTest, suite *dsl.S
 	}
 
 	releaseName := req.ReleaseName
-	vals := buildValuesForInstall(test)
+	vals := applyDepsBindings(buildValuesForInstall(test), mergedExports)
 
 	var installErr error
 	if renderErr == nil {
@@ -498,6 +617,111 @@ func tierApplies(testTier []string, active string) bool {
 		}
 	}
 	return false
+}
+
+// backendSupportsDeps reports whether a backend supports integration-tier
+// features (`dependencies:` installation and lifecycle hooks). envtest does
+// not - it has no controllers to reconcile Helm releases or hook jobs.
+func backendSupportsDeps(backendType string) bool {
+	return backendType != "envtest"
+}
+
+// splitDepsByScope partitions deps by scope. The default scope (empty string)
+// is treated as "suite" to match DESIGN.md §12.
+func splitDepsByScope(allDeps []dsl.Dependency) (cluster, suite, test []dsl.Dependency) {
+	for _, dep := range allDeps {
+		switch dep.Scope {
+		case "cluster":
+			cluster = append(cluster, dep)
+		case "test":
+			test = append(test, dep)
+		default:
+			suite = append(suite, dep)
+		}
+	}
+	return
+}
+
+// narrowTestDepsToNamespace clones each test-scoped dep with its namespace
+// pinned to the per-test namespace when the dep didn't specify one. This lets
+// users write `scope: test` deps without repeating namespaces.
+func narrowTestDepsToNamespace(testDeps []dsl.Dependency, namespace string) []dsl.Dependency {
+	if len(testDeps) == 0 {
+		return nil
+	}
+	out := make([]dsl.Dependency, len(testDeps))
+	for idx, dep := range testDeps {
+		clone := dep
+		if clone.Namespace == "" {
+			clone.Namespace = namespace
+		}
+		out[idx] = clone
+	}
+	return out
+}
+
+// mergeExports overlays test-scope exports onto suite-scope exports. Test-scope
+// entries win when keys collide.
+func mergeExports(suite, test deps.ExportMap) deps.ExportMap {
+	out := deps.ExportMap{}
+	for name, kv := range suite {
+		for key, val := range kv {
+			out.Set(name, key, val)
+		}
+	}
+	for name, kv := range test {
+		for key, val := range kv {
+			out.Set(name, key, val)
+		}
+	}
+	return out
+}
+
+// applyDepsBindings walks a map of values and substitutes any string
+// containing `${{ deps.<name>.<key> }}` with the matching export value.
+// Other interpolation tokens are left untouched.
+func applyDepsBindings(values map[string]any, exports deps.ExportMap) map[string]any {
+	if len(values) == 0 || len(exports) == 0 {
+		return values
+	}
+	out := make(map[string]any, len(values))
+	for key, val := range values {
+		out[key] = substituteDepsValue(val, exports)
+	}
+	return out
+}
+
+func substituteDepsValue(value any, exports deps.ExportMap) any {
+	switch typed := value.(type) {
+	case string:
+		return substituteDepsString(typed, exports)
+	case map[string]any:
+		return applyDepsBindings(typed, exports)
+	case []any:
+		out := make([]any, len(typed))
+		for idx, elem := range typed {
+			out[idx] = substituteDepsValue(elem, exports)
+		}
+		return out
+	default:
+		return value
+	}
+}
+
+var depsTokenRegex = regexp.MustCompile(`\$\{\{\s*deps\.([a-zA-Z0-9_-]+)\.([a-zA-Z0-9_-]+)\s*\}\}`)
+
+func substituteDepsString(input string, exports deps.ExportMap) string {
+	return depsTokenRegex.ReplaceAllStringFunc(input, func(match string) string {
+		sub := depsTokenRegex.FindStringSubmatch(match)
+		if len(sub) != 3 {
+			return match
+		}
+		val, ok := exports.Get(sub[1], sub[2])
+		if !ok {
+			return match
+		}
+		return val
+	})
 }
 
 // buildValuesForInstall mirrors the values-merge that buildRenderRequest
