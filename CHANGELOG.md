@@ -1,6 +1,26 @@
 # Changelog
 
 All notable changes to this project are documented in this file.
+## [0.5.0] - 2026-08-13
+
+### Features
+
+- *(dist)* Add Helm plugin manifest and install hooks
+- *(dist)* Add consumer-facing pre-commit hook manifest
+- *(kubeclient)* Add in-memory REST client getter for envtest
+- *(doctor)* Add envtest binary bootstrap (KUBEBUILDER_ASSETS → setup-envtest → download)
+- *(cluster)* Add Backend abstraction and implement envtest backend
+- *(matchers)* Add applies/rejected/lookup apply-tier matchers
+- *(runner)* Add apply-tier runner (envtest install + assert)
+- *(test)* Wire envtest apply test on test command
+- *(test)* Unify --match, --fail-fast, and -u across both tiers
+- *(reporter)* Add support for json output
+- *(cli)* Kube-version matrix, improve flags and update README
+
+### Miscellaneous
+
+- Add CLI smoke test
+
 ## [0.4.0] - 2026-08-10
 
 ### Features
