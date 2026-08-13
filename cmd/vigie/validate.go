@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/fregateops/vigie/internal/cienv"
@@ -22,7 +23,7 @@ var (
 )
 
 var validateCmd = &cobra.Command{
-	Use:   "validate <chart>",
+	Use:   "validate [chart]",
 	Short: "Render the chart against each values overlay and validate output with kubeconform",
 	Long: `validate is a chart-level smoke check. It renders the chart with the
 implicit baseline (values.yaml) plus any value overlays you supply, then runs
@@ -42,11 +43,12 @@ No test files are consumed.`,
 
   # Emit SARIF for a CI code-scanning upload
   vigie validate ./mychart -o sarif`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MaximumNArgs(1),
 	RunE: runValidateCmd,
 }
 
 func init() {
+	validateCmd.Flags().IntVarP(&flagParallelism, "parallelism", "p", runtime.NumCPU(), "Number of parallel scenarios")
 	validateCmd.Flags().StringSliceVar(&flagValidateValues, "values", nil,
 		"Value overlay files (helm `-f` semantics). Repeat or comma-separate; each overlay produces an independent render.")
 	validateCmd.Flags().StringSliceVar(&flagValidateKubeVersions, "kube-version", nil,
@@ -61,7 +63,7 @@ func init() {
 }
 
 func runValidateCmd(cmd *cobra.Command, args []string) error {
-	chartPath := args[0]
+	chartPath := argOrCwd(args)
 
 	for idx, v := range flagValidateKubeVersions {
 		if err := config.ValidateKubeVersion(fmt.Sprintf("--kube-version[%d]", idx), v); err != nil {

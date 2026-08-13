@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/fregateops/vigie/internal/cienv"
 	"github.com/fregateops/vigie/internal/cluster"
@@ -19,8 +20,8 @@ var (
 	flagTestTestsDir        string
 	flagTestSnapshotDir     string
 	flagTestPassOnWarning   bool
-	flagTestNoSchema        bool
-	flagTestKubeVersion     string
+	flagTestSchema          bool
+	flagTestKubeVersions    []string
 	flagTestCluster         string
 	flagTestKubeconfig      string
 	flagTestFailFast        bool
@@ -40,7 +41,7 @@ const clusterNone = "none"
 const exitWarnings = 5
 
 var testCmd = &cobra.Command{
-	Use:   "test <chart>",
+	Use:   "test [chart]",
 	Short: "Render templates per test and run user assertions (optionally against a cluster)",
 	Long: "Run a chart's tests. By default (--cluster none) templates are rendered in-process\n" +
 		"and assertions run against the rendered manifests. Pass --cluster to install each\n" +
@@ -55,17 +56,18 @@ var testCmd = &cobra.Command{
 
   # Run a single test file and emit JUnit for CI
   vigie test ./mychart --file tests/unit/deployment_test.yaml -o junit`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MaximumNArgs(1),
 	RunE: runTestCmd,
 }
 
 func init() {
+	testCmd.Flags().IntVarP(&flagParallelism, "parallelism", "p", runtime.NumCPU(), "Number of parallel test files")
 	testCmd.Flags().StringVar(&flagTestFile, "file", "", "Run a specific test file instead of discovering all")
 	testCmd.Flags().StringVar(&flagTestTestsDir, "tests", "", "Directory to scan recursively for *_test.yaml (overrides test.testsDir; default: <chart>/tests)")
 	testCmd.Flags().StringVar(&flagTestSnapshotDir, "snapshot-dir", "", "Directory for snapshot files (default: <chart>/tests/snapshots)")
 	testCmd.Flags().BoolVar(&flagTestPassOnWarning, "pass-on-warning", false, "Exit 0 on run warnings such as no tests executed (default: exit 5)")
-	testCmd.Flags().BoolVar(&flagTestNoSchema, "no-schema", false, "Skip the per-test kubeconform pass (template tier; on by default)")
-	testCmd.Flags().StringVar(&flagTestKubeVersion, "kube-version", "", "Kubernetes version: kubeconform pass (template tier) or cluster backend version (default: 1.36.1)")
+	testCmd.Flags().BoolVar(&flagTestSchema, "schema", true, "Run the per-test kubeconform pass (template tier)")
+	testCmd.Flags().StringSliceVar(&flagTestKubeVersions, "kube-version", nil, "Kubernetes version(s), repeatable: template tier matrixes kubeconform over all; cluster tier uses the first (default: 1.36.1)")
 	testCmd.Flags().StringVar(&flagTestCluster, "cluster", clusterNone, "Cluster backend for the apply tier: none|envtest|simulated|kind|k3d|kubeconfig (default none = template tier)")
 	testCmd.Flags().StringVar(&flagTestKubeconfig, "kubeconfig", "", "Path to kubeconfig for --cluster kubeconfig (overrides testApply.cluster.kubeconfig)")
 	testCmd.Flags().BoolVar(&flagTestFailFast, "fail-fast", false, "Cancel queued tests after the first failure")
@@ -76,13 +78,15 @@ func init() {
 }
 
 func runTestCmd(cmd *cobra.Command, args []string) error {
-	chartPath := args[0]
+	chartPath := argOrCwd(args)
 
 	slog.Debug("invoked", "command", "test", "chart", chartPath,
 		"cluster", flagTestCluster, "parallelism", flagParallelism)
 
-	if err := config.ValidateKubeVersion("--kube-version", flagTestKubeVersion); err != nil {
-		exitErr(3, "%v", err)
+	for idx, ver := range flagTestKubeVersions {
+		if err := config.ValidateKubeVersion(fmt.Sprintf("--kube-version[%d]", idx), ver); err != nil {
+			exitErr(3, "%v", err)
+		}
 	}
 
 	cfg, err := config.Load(chartPath)
@@ -148,11 +152,13 @@ func discoverTests(chartPath, testsDir string) ([]string, error) {
 // against the selected live cluster backend.
 func runTests(ctx context.Context, chartPath string, cfg *config.Config, files []string) ([]runner.SuiteResult, error) {
 	if flagTestCluster == clusterNone {
-		// Schema validation is on by default; --no-schema or test.skipSchema disables it.
-		skipSchema := flagTestNoSchema || cfg.Test.SkipSchema
-		kubeVersion := flagTestKubeVersion
-		if kubeVersion == "" && len(cfg.Test.KubeVersions) > 0 {
-			kubeVersion = cfg.Test.KubeVersions[0]
+		// Schema validation is on by default; --schema=false or test.skipSchema disables it.
+		skipSchema := !flagTestSchema || cfg.Test.SkipSchema
+		// The template tier matrixes kubeconform over every requested version;
+		// the flag wins, else the chart's test.kubeVersions, else the default.
+		kubeVersions := flagTestKubeVersions
+		if len(kubeVersions) == 0 {
+			kubeVersions = cfg.Test.KubeVersions
 		}
 		return runner.Run(runner.Options{
 			ChartPath:       chartPath,
@@ -162,7 +168,7 @@ func runTests(ctx context.Context, chartPath string, cfg *config.Config, files [
 			SnapshotDir:     flagTestSnapshotDir,
 			SnapshotUpdate:  flagTestUpdateSnapshots,
 			ValidateSchemas: !skipSchema,
-			KubeVersion:     kubeVersion,
+			KubeVersions:    kubeVersions,
 			Match:           flagTestMatch,
 			FailFast:        flagTestFailFast,
 		})
@@ -193,7 +199,8 @@ func runTests(ctx context.Context, chartPath string, cfg *config.Config, files [
 // resolveClusterConfig builds the cluster.Config from the --cluster flag,
 // layering --kube-version / --kubeconfig over the chart's testApply.cluster
 // settings. The backend type comes from the flag (already known to be a real
-// backend, not "none").
+// backend, not "none"). A cluster pins a single Kubernetes version, so when
+// --kube-version lists several the first wins and the rest are warned about.
 func resolveClusterConfig(cfg *config.Config) cluster.Config {
 	configured := cfg.TestApply.Cluster
 	resolved := cluster.Config{
@@ -201,8 +208,12 @@ func resolveClusterConfig(cfg *config.Config) cluster.Config {
 		KubeVersion: configured.KubeVersion,
 		Kubeconfig:  configured.Kubeconfig,
 	}
-	if flagTestKubeVersion != "" {
-		resolved.KubeVersion = flagTestKubeVersion
+	if len(flagTestKubeVersions) > 0 {
+		resolved.KubeVersion = flagTestKubeVersions[0]
+		if len(flagTestKubeVersions) > 1 {
+			fmt.Fprintf(os.Stderr, "vigie: warning: --cluster %s pins one Kubernetes version; using %s and ignoring %d more\n",
+				flagTestCluster, flagTestKubeVersions[0], len(flagTestKubeVersions)-1)
+		}
 	}
 	if flagTestKubeconfig != "" {
 		resolved.Kubeconfig = flagTestKubeconfig

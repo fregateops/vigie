@@ -2,9 +2,11 @@
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 
-> **Status: template + validate tiers shipped.** `vigie lint`, `vigie test` (template-tier
-> render + assertions), `vigie validate` (kubeconform), and `vigie schema` work end to end.
-> The `test-apply` cluster tiers are on the [roadmap](#roadmap).
+> **Status: template, validate, and the envtest apply tier shipped.** `vigie lint`,
+> `vigie test` (render + assertions, and `--cluster envtest` to install each test against a
+> real API server), `vigie validate` (kubeconform), and `vigie schema` work end to end.
+> Higher-fidelity cluster backends (kubeconfig, kind/k3d, simulated) are on the
+> [roadmap](#roadmap).
 
 A single CLI and declarative YAML DSL for testing Helm charts across progressively
 higher-fidelity tiers — from fast in-process template rendering to full end-to-end cluster
@@ -12,16 +14,27 @@ tests. Helm is used as a **library**, never shelled out.
 
 ---
 
-## Tiers
+## Commands and tiers
 
-| Tier | Backend | What it proves | Status |
+Three chart commands, plus `schema`/`version` utilities:
+
+| Command | What it proves | Status |
+|---|---|---|
+| `vigie lint` | Chart hygiene: Chart.yaml, best-practices, deprecations | ✅ shipped |
+| `vigie validate` | Rendered YAML is structurally valid Kubernetes (kubeconform) | ✅ shipped |
+| `vigie test` | Assertions over rendered manifests, optionally against a live cluster | ✅ shipped |
+
+`lint` and `validate` are chart-level (no test files). `test` is the **fidelity dial**: it renders
+in-process by default, and `--cluster` raises it to install each test against a real control plane
+and assert on the live objects.
+
+| `vigie test --cluster …` | Backend | What it adds | Status |
 |---|---|---|---|
-| `lint` | Static analysis | Chart hygiene, Chart.yaml, deprecations | ✅ shipped |
-| `test` (template) | `helm template` in-process + assertions | Go template logic produces the expected YAML | ✅ shipped |
-| `validate` | template + kubeconform | Rendered YAML is structurally valid Kubernetes | ✅ shipped |
-| `test-apply api` | envtest (real apiserver + etcd) | The API server accepts the resources | 🔜 planned |
-| `test-apply simulated` | envtest + controllers + kwok | Controllers reconcile, Pods start | 🔜 planned |
-| `test-apply e2e` | k3d / kind / external cluster | Workloads run, real network and probes | 🔜 planned |
+| `none` (default) | `helm template` in-process | Template logic produces the expected YAML | ✅ shipped |
+| `envtest` | real kube-apiserver + etcd, no controllers | The API server accepts the resources | ✅ shipped |
+| `kubeconfig` | a cluster you already have | Runs against a real cluster you provide | TODO |
+| `simulated` | envtest + controllers + kwok | Controllers reconcile, Pods start | TODO |
+| `kind` / `k3d` | provisioned throwaway node cluster | Workloads run, real network and probes | TODO |
 
 ---
 
@@ -284,28 +297,38 @@ vigie schema > .vigie.schema.json
 ```
 vigie version                 print version information
 
-vigie lint <chart>            static analysis: chart-yaml, best-practices, deprecations
+vigie lint [chart]            static analysis: chart-yaml, best-practices, deprecations
   --rule-sets <a,b>           run only these rule sets (default: all)
   --disable-rules <a,b>       skip specific rule IDs (added to config)
   --kube-version <ver>        target Kubernetes API version for deprecation checks
 
-vigie test <chart>            template tier: render + assert (tests/unit/*_test.yaml)
+vigie test [chart]            render + assert; --cluster raises fidelity to a live backend
+  --cluster <backend>         none|envtest (default: none)
   --file <path>               run a single test file instead of discovering all
   --tests <dir>               discovery root (default: <chart>/tests)
+  --match <regex>             run only tests whose display name matches
+  -u, --update-snapshots      update snapshots on mismatch instead of failing
+  --fail-fast                 cancel queued tests after the first failure
+  --schema                    run the per-test kubeconform pass (default: true; --schema=false skips)
+  --kube-version <a,b,…>      Kubernetes version(s): template matrixes all, cluster uses the first
   --snapshot-dir <dir>        snapshot directory (default: <chart>/tests/snapshots)
-  --no-schema                 skip the per-test kubeconform pass (on by default)
-  --kube-version <ver>        Kubernetes version for the kubeconform pass (default: 1.36.1)
+  --kubeconfig <path>         kubeconfig for --cluster kubeconfig
+  --keep-cluster              keep the cluster after the run (node-backed backends)
   --pass-on-warning           exit 0 on run warnings, e.g. no tests executed (default: exit 5)
+  -p, --parallelism <n>       parallel test files (default: CPU count)
 
-vigie validate <chart>        chart tier: render values.yaml + overlays, validate with kubeconform
+vigie validate [chart]        chart tier: render values.yaml + overlays, validate with kubeconform
   --values <a.yaml,b.yaml>    value overlays (helm -f); each runs as an independent scenario
   --kube-version <a,b>        Kubernetes versions to validate against (default: 1.36.1)
   --set / --set-json / --set-literal <k=v>   value overrides (helm semantics)
+  -p, --parallelism <n>       parallel scenarios (default: CPU count)
 
 vigie schema                  print the test-file JSON Schema
 ```
 
-Global flags: `-o, --output pretty|junit|sarif|tap` · `-p, --parallelism <n>` · `-v` debug / `-vv` trace.
+Chart commands default `[chart]` to the current directory, so `vigie test` works from inside a
+chart. Global flags: `-o, --output pretty|json|junit|sarif|tap` · `-v` debug / `-vv` trace.
+`-p, --parallelism` lives on `test` and `validate` (the commands that parallelize), not globally.
 
 Exit codes: `0` pass · `1` test failure · `2` setup error · `3` user error · `4` infra error ·
 `5` warnings (e.g. no tests executed; suppress with `--pass-on-warning`).
@@ -380,10 +403,13 @@ Features land milestone by milestone; each is independently releasable.
 | M1 | ✅ | `vigie lint` — chart-yaml, best-practices, deprecation rule sets |
 | M2 | ✅ | DSL & JSON Schema foundation, `vigie schema` |
 | M3 | ✅ | `vigie test` — template tier: full matcher library, matrix/cases, snapshots, helper tests |
-| M4 | 🔜 | `vigie validate` (kubeconform), SARIF/TAP reporters, CI annotations |
-| M5 | 🔜 | Distribution: Helm plugin, install scripts, pre-commit hook manifest |
-| M6–M8 | 🔜 | `vigie test-apply` — envtest (api), e2e (kind/k3d), simulated tiers |
-| M9 | 🔜 | `vigie doctor`, docs site, `watch`/`--changed` |
+| M4 | ✅ | `vigie validate` (kubeconform), JSON/SARIF/TAP reporters, CI annotations |
+| M5 | ✅ | Distribution: Helm plugin, install scripts, pre-commit hook manifest |
+| M6 | ✅ | `vigie test --cluster envtest` — apply tier against a real API server |
+| M7 | 🔜 | `vigie test --cluster kubeconfig` + integration format (deps, hooks, live matchers) |
+| M8 | 🔜 | `vigie test --cluster kind\|k3d` — self-provisioned e2e clusters |
+| M9 | 🔜 | `vigie test --cluster simulated` — envtest + controllers + kwok |
+| M10 | 🔜 | `vigie doctor`, `vigie run`, docs site, `watch`/`--changed` |
 
 ---
 

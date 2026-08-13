@@ -52,14 +52,21 @@ type Options struct {
 	Cfg             *config.Config
 	SnapshotDir     string // default: "<chartPath>/tests/snapshots"
 	SnapshotUpdate  bool
-	ValidateSchemas bool   // when true, kubeconform-validate each test's rendered docs
-	KubeVersion     string // kubernetes version for schema validation; empty = config.DefaultKubeVersion
+	ValidateSchemas bool     // when true, kubeconform-validate each test's rendered docs
+	KubeVersions    []string // kubernetes versions to schema-validate against; empty = [config.DefaultKubeVersion]
 	// Match is a regex evaluated against expanded test display names. Empty
 	// runs every discovered test.
 	Match string
 	// FailFast cancels queued files after the first test failure. In-flight
 	// files run to completion.
 	FailFast bool
+}
+
+// versionedValidator pairs a kubeconform validator with the Kubernetes version
+// it targets, so matrix failures can name the version that rejected a document.
+type versionedValidator struct {
+	version string
+	sv      *render.SchemaValidator
 }
 
 // resolveSnapshotDir returns the snapshot directory: the explicit override
@@ -83,20 +90,27 @@ type expandedTest struct {
 func Run(opts Options) ([]SuiteResult, error) {
 	slog.Debug("starting runner", "files", len(opts.TestFiles), "parallelism", opts.Parallelism, "validateSchemas", opts.ValidateSchemas)
 
-	// Build one schema validator shared across all files/tests; its in-memory
-	// schema cache then amortises across every rendered document.
-	var schemaValidator *render.SchemaValidator
+	// Build one schema validator per requested Kubernetes version, shared across
+	// all files/tests; each validator's in-memory schema cache then amortises
+	// across every rendered document. Multiple versions matrix the kubeconform
+	// pass the same way `validate` does.
+	var validators []versionedValidator
 	if opts.ValidateSchemas {
-		kubeVer := opts.KubeVersion
-		if kubeVer == "" {
-			kubeVer = config.DefaultKubeVersion
+		versions := opts.KubeVersions
+		if len(versions) == 0 {
+			versions = []string{config.DefaultKubeVersion}
 		}
-		sv, err := render.NewSchemaValidator(kubeVer)
-		if err != nil {
-			return nil, fmt.Errorf("setup error: %w", err)
+		for _, kubeVer := range versions {
+			if kubeVer == "" {
+				kubeVer = config.DefaultKubeVersion
+			}
+			sv, err := render.NewSchemaValidator(kubeVer)
+			if err != nil {
+				return nil, fmt.Errorf("setup error: %w", err)
+			}
+			validators = append(validators, versionedValidator{version: kubeVer, sv: sv})
 		}
-		schemaValidator = sv
-		slog.Debug("schema validator ready", "kubeVersion", kubeVer)
+		slog.Debug("schema validators ready", "versions", versions)
 	}
 
 	matchRE, err := compileMatchRegex(opts.Match)
@@ -119,7 +133,7 @@ func Run(opts Options) ([]SuiteResult, error) {
 		default:
 		}
 
-		sr, fileErr := runFile(path, opts, schemaValidator, matchRE)
+		sr, fileErr := runFile(path, opts, validators, matchRE)
 		if opts.FailFast && fileErr == nil && SuiteHasFailure(sr) {
 			failFastOnce.Do(func() {
 				slog.Debug("test: fail-fast triggered", "file", path)
@@ -130,7 +144,7 @@ func Run(opts Options) ([]SuiteResult, error) {
 	})
 }
 
-func runFile(filePath string, opts Options, sv *render.SchemaValidator, matchRE *regexp.Regexp) (SuiteResult, error) {
+func runFile(filePath string, opts Options, validators []versionedValidator, matchRE *regexp.Regexp) (SuiteResult, error) {
 	slog.Debug("loading test file", "file", filePath)
 	start := time.Now()
 
@@ -157,7 +171,7 @@ func runFile(filePath string, opts Options, sv *render.SchemaValidator, matchRE 
 			slog.Debug("skipping test (no match)", "test", et.DisplayName)
 			continue
 		}
-		sr.Results = append(sr.Results, runTest(et, suite, opts, store, sv))
+		sr.Results = append(sr.Results, runTest(et, suite, opts, store, validators))
 	}
 	sr.Duration = time.Since(start)
 	slog.Debug("suite finished", "suite", suite.SuiteName, "tests", len(sr.Results), "duration", sr.Duration)
@@ -283,7 +297,7 @@ func formatEntry(entry map[string]any) string {
 	return strings.Join(parts, ", ")
 }
 
-func runTest(et expandedTest, suite *dsl.Suite, opts Options, store *snapshot.Store, sv *render.SchemaValidator) (tr TestResult) {
+func runTest(et expandedTest, suite *dsl.Suite, opts Options, store *snapshot.Store, validators []versionedValidator) (tr TestResult) {
 	test := et.Test
 	tr = TestResult{SuiteName: suite.SuiteName, TestName: et.DisplayName}
 	start := time.Now()
@@ -322,14 +336,18 @@ func runTest(et expandedTest, suite *dsl.Suite, opts Options, store *snapshot.St
 		allDocs = renderResult.Docs
 	}
 
-	// Schema validation (validate tier), on by default unless --no-schema.
-	if sv != nil && renderErr == nil && len(allDocs) > 0 {
-		schemaErrs, err := sv.Validate(allDocs)
-		if err != nil {
-			tr.Failures = append(tr.Failures, fmt.Sprintf("        schema validation error: %v", err))
-		}
-		for _, se := range schemaErrs {
-			tr.Failures = append(tr.Failures, fmt.Sprintf("        schema: %s/%s: %s", se.Kind, se.Name, se.Message))
+	// Schema validation (kubeconform), on by default unless --schema=false. Each
+	// requested Kubernetes version runs as its own pass; failures name the
+	// version so a matrix run points at the offending target.
+	if renderErr == nil && len(allDocs) > 0 {
+		for _, vv := range validators {
+			schemaErrs, err := vv.sv.Validate(allDocs)
+			if err != nil {
+				tr.Failures = append(tr.Failures, fmt.Sprintf("        schema[k8s %s] validation error: %v", vv.version, err))
+			}
+			for _, se := range schemaErrs {
+				tr.Failures = append(tr.Failures, fmt.Sprintf("        schema[k8s %s]: %s/%s: %s", vv.version, se.Kind, se.Name, se.Message))
+			}
 		}
 	}
 

@@ -19,7 +19,7 @@ var (
 )
 
 var lintCmd = &cobra.Command{
-	Use:   "lint <chart>",
+	Use:   "lint [chart]",
 	Short: "Static analysis: chart-yaml, deprecations, best-practices",
 	Example: `  # Lint a chart with all default rule sets
   vigie lint ./mychart
@@ -27,7 +27,7 @@ var lintCmd = &cobra.Command{
   # Run only best-practices and skip one rule, emitting JUnit
   vigie lint ./mychart --rule-sets template-best-practices \
     --disable-rules template-best-practices_missing-resource-limits -o junit`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MaximumNArgs(1),
 	RunE: runLintCmd,
 }
 
@@ -43,7 +43,7 @@ func init() {
 }
 
 func runLintCmd(cmd *cobra.Command, args []string) error {
-	chartPath := args[0]
+	chartPath := argOrCwd(args)
 
 	slog.Debug("invoked", "command", "lint", "chart", chartPath)
 
