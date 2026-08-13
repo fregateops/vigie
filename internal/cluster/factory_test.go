@@ -1,6 +1,7 @@
 package cluster_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/fregateops/vigie/internal/cluster"
@@ -23,6 +24,26 @@ func TestNew_defaultIsEnvtest(t *testing.T) {
 	}
 	if backend == nil {
 		t.Fatal("expected non-nil backend")
+	}
+}
+
+func TestNew_kubeconfig(t *testing.T) {
+	backend, err := cluster.New(cluster.Config{Type: "kubeconfig", Kubeconfig: "/some/kubeconfig"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if backend == nil {
+		t.Fatal("expected non-nil backend")
+	}
+}
+
+func TestNew_kubeconfig_requiresPath(t *testing.T) {
+	_, err := cluster.New(cluster.Config{Type: "kubeconfig"})
+	if err == nil {
+		t.Fatal("expected error when kubeconfig path is empty")
+	}
+	if !strings.Contains(err.Error(), "kubeconfig path") {
+		t.Fatalf("error should mention the missing kubeconfig path: %v", err)
 	}
 }
 
