@@ -46,13 +46,17 @@ var testCmd = &cobra.Command{
 	Long: "Run a chart's tests. By default (--cluster none) templates are rendered in-process\n" +
 		"and assertions run against the rendered manifests. Pass --cluster to install each\n" +
 		"test's chart into a real control plane and assert against the live objects:\n\n" +
-		"  envtest  real kube-apiserver + etcd, no controllers (fast, dependency-free)\n\n" +
-		"simulated, kind, k3d, and kubeconfig arrive in later releases.",
+		"  envtest     real kube-apiserver + etcd, no controllers (fast, dependency-free)\n" +
+		"  kubeconfig  a cluster you already run, reached via an external kubeconfig\n\n" +
+		"simulated, kind, and k3d arrive in later releases.",
 	Example: `  # Template tier: render every tests/*_test.yaml under the chart
   vigie test ./mychart
 
   # Apply tier: install each test against an in-process apiserver (envtest)
   vigie test ./mychart --cluster envtest
+
+  # Integration tier: run against a cluster you already have
+  vigie test ./mychart --cluster kubeconfig --kubeconfig ~/.kube/config
 
   # Run a single test file and emit JUnit for CI
   vigie test ./mychart --file tests/unit/deployment_test.yaml -o junit`,

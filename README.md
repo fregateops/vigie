@@ -2,11 +2,12 @@
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 
-> **Status: template, validate, and the envtest apply tier shipped.** `vigie lint`,
-> `vigie test` (render + assertions, and `--cluster envtest` to install each test against a
-> real API server), `vigie validate` (kubeconform), and `vigie schema` work end to end.
-> Higher-fidelity cluster backends (kubeconfig, kind/k3d, simulated) are on the
-> [roadmap](#roadmap).
+> **Status: template, validate, and the envtest + kubeconfig apply tiers shipped.** `vigie lint`,
+> `vigie test` (render + assertions, `--cluster envtest` to install each test against a
+> real API server, and `--cluster kubeconfig` to run integration tests — dependencies,
+> lifecycle hooks, and live-cluster matchers — against a cluster you already have),
+> `vigie validate` (kubeconform), and `vigie schema` work end to end.
+> Self-provisioned cluster backends (kind/k3d, simulated) are on the [roadmap](#roadmap).
 
 A single CLI and declarative YAML DSL for testing Helm charts across progressively
 higher-fidelity tiers — from fast in-process template rendering to full end-to-end cluster
@@ -32,7 +33,7 @@ and assert on the live objects.
 |---|---|---|---|
 | `none` (default) | `helm template` in-process | Template logic produces the expected YAML | ✅ shipped |
 | `envtest` | real kube-apiserver + etcd, no controllers | The API server accepts the resources | ✅ shipped |
-| `kubeconfig` | a cluster you already have | Runs against a real cluster you provide | TODO |
+| `kubeconfig` | a cluster you already have | Integration tests (deps, hooks, live matchers) against a real cluster you provide | ✅ shipped |
 | `simulated` | envtest + controllers + kwok | Controllers reconcile, Pods start | TODO |
 | `kind` / `k3d` | provisioned throwaway node cluster | Workloads run, real network and probes | TODO |
 
@@ -303,7 +304,7 @@ vigie lint [chart]            static analysis: chart-yaml, best-practices, depre
   --kube-version <ver>        target Kubernetes API version for deprecation checks
 
 vigie test [chart]            render + assert; --cluster raises fidelity to a live backend
-  --cluster <backend>         none|envtest (default: none)
+  --cluster <backend>         none|envtest|kubeconfig (default: none)
   --file <path>               run a single test file instead of discovering all
   --tests <dir>               discovery root (default: <chart>/tests)
   --match <regex>             run only tests whose display name matches
