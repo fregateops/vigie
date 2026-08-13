@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/fregateops/vigie/internal/cluster/envtest"
+	"github.com/fregateops/vigie/internal/cluster/kubeconfig"
 )
 
 // DefaultType is the cluster backend used when Config.Type is empty.
@@ -13,9 +14,10 @@ const DefaultType = "envtest"
 
 // New returns a Backend matching cfg.Type. Empty Type defaults to envtest.
 //
-// Only the envtest backend is available in this milestone; the node-backed
-// (kind, k3d, kubeconfig) and simulated backends arrive in later milestones
-// and currently return an error so misconfiguration fails loudly.
+// envtest (in-process apiserver) and kubeconfig (an external cluster the user
+// already runs) are available; the node-backed (kind, k3d) and simulated
+// backends arrive in later milestones and currently return an error so
+// misconfiguration fails loudly.
 func New(cfg Config) (Backend, error) {
 	backendType := cfg.Type
 	if backendType == "" {
@@ -24,7 +26,12 @@ func New(cfg Config) (Backend, error) {
 	switch backendType {
 	case "envtest":
 		return envtest.New(cfg.KubeVersion), nil
+	case "kubeconfig":
+		if cfg.Kubeconfig == "" {
+			return nil, fmt.Errorf("kubeconfig backend requires a non-empty kubeconfig path")
+		}
+		return kubeconfig.New(cfg.Kubeconfig), nil
 	default:
-		return nil, fmt.Errorf("unknown cluster backend %q: the only supported backend is envtest", backendType)
+		return nil, fmt.Errorf("unknown cluster backend %q: valid values are envtest, kubeconfig", backendType)
 	}
 }
