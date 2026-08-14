@@ -20,6 +20,7 @@
             go_1_26
             gnumake
             pre-commit
+            gitleaks
             git-cliff
             # release tooling
             goreleaser
