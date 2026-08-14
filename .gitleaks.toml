@@ -1,0 +1,11 @@
+# gitleaks config: default rules plus a scoped allowlist for test fixtures.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "vigie integration test fixtures - a self-signed dev cert and an htpasswd line staged as apply-tier dependencies, not real secrets"
+paths = [
+  '''testdata/charts/basic/tests/integration/fixtures/tls\.key''',
+  '''testdata/charts/basic/tests/integration/fixtures/tls\.crt''',
+  '''testdata/charts/basic/tests/integration/fixtures/htpasswd''',
+]

@@ -20,3 +20,9 @@ repos:
         language: system
         pass_filenames: false
         files: \.go$
+
+      - id: gitleaks
+        name: gitleaks
+        description: Scan changed files for hardcoded secrets
+        entry: gitleaks dir --no-banner --redact --config .gitleaks.toml
+        language: system
