@@ -1,9 +1,12 @@
 replicaCount: 3
 
+# nginx so apply-tier integration tests can actually reach Ready and serve
+# HTTP against a real cluster. Unit-tier tests assert the rendered image
+# reference, so any change here cascades into tests/unit/*.yaml.
 image:
-  repository: myrepo/app
+  repository: nginx
   pullPolicy: IfNotPresent
-  tag: "1.2.3"
+  tag: "stable-alpine"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -43,13 +46,15 @@ autoscaling:
   maxReplicas: 5
   targetCPUUtilizationPercentage: 80
 
+# nginx serves its default page at "/"; probe there so pods reach Ready in a
+# real cluster (nginx has no /healthz or /readyz endpoint).
 livenessProbe:
   httpGet:
-    path: /healthz
+    path: /
     port: http
 readinessProbe:
   httpGet:
-    path: /readyz
+    path: /
     port: http
 
 nodeSelector: {}

@@ -1,0 +1,105 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/fregateops/vigie/refs/heads/main/pkg/api/schema/v1/testfile.json
+suite: dependency ordering and lifecycle hooks
+
+# Stages the secrets a production nginx deployment consumes, then installs the
+# chart on top - all against a real cluster:
+#
+#   basic-auth  htpasswd credentials for an ingress-nginx basic-auth secret
+#               (Opaque Secret with an "auth" key - the canonical shape).
+#   tls         a TLS keypair an Ingress or HTTPS server terminates with.
+#
+# Both are suite-scoped and share a DAG level (no dependsOn), so the engine
+# installs them concurrently. The landing-page ConfigMap declares dependsOn on
+# both, so the engine puts it in the next batch and waits for them first.
+#
+# beforeAll/afterAll run once around the whole suite - coarse setup and
+# teardown every test shares.
+
+cluster:
+  backend: kubeconfig
+
+defaults:
+  release:
+    name: myapp
+
+dependencies:
+  # --- implicit (concurrent) ------------------------------------------------
+  # ingress-nginx basic-auth secret: an Opaque Secret with an htpasswd "auth"
+  # key. Sourced from an env var, falling back to a committed dev file so the
+  # suite runs without exporting anything.
+  - name: basic-auth
+    namespace: default
+    scope: suite
+    source:
+      secret:
+        keys:
+          - key: auth
+            env: NGINX_BASIC_AUTH_HTPASSWD
+            fallback:
+              key: auth
+              file: ./fixtures/htpasswd
+
+  # TLS keypair nginx terminates with. Two data keys, each read from a
+  # self-signed dev cert in fixtures. Same DAG level as basic-auth.
+  - name: tls
+    namespace: default
+    scope: suite
+    source:
+      secret:
+        keys:
+          - key: tls.crt
+            file: ./fixtures/tls.crt
+          - key: tls.key
+            file: ./fixtures/tls.key
+
+  # --- explicit (ordered) ---------------------------------------------------
+  # Custom landing page, applied only after both secrets exist.
+  - name: landing-page
+    namespace: default
+    scope: suite
+    dependsOn: [basic-auth, tls]
+    source:
+      manifest: ./fixtures/landing-page.yaml
+
+beforeAll:
+  - run: "echo 'suite setup: nginx secrets staged'"
+
+afterAll:
+  - run: "echo 'suite teardown: releasing namespaces'"
+
+tests:
+  - it: the Deployment applies once the nginx secrets are staged
+    target:
+      kind: Deployment
+    asserts:
+      - applies: {}
+
+  - it: the Service applies once the nginx secrets are staged
+    target:
+      kind: Service
+    asserts:
+      - applies: {}
+
+  - it: the basic-auth secret is live and carries an htpasswd auth key
+    asserts:
+      - lookup:
+          kind: Secret
+          name: basic-auth
+          namespace: default
+          within: 30s
+          then:
+            - isKind: Secret
+            - exists:
+                path: data.auth
+
+  - it: the landing-page ConfigMap is live after its dependencies
+    asserts:
+      - lookup:
+          kind: ConfigMap
+          name: nginx-landing-page
+          namespace: default
+          within: 30s
+          then:
+            - matchRegex:
+                path: data["index.html"]
+                pattern: "Welcome to basic on vigie"

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-landing-page
+  namespace: default
+  labels:
+    app.kubernetes.io/name: basic
+    app.kubernetes.io/managed-by: vigie
+data:
+  # Mounted into /usr/share/nginx/html in a fuller setup; staged here after the
+  # basic-auth and tls secrets so the ordered dependency has something to serve.
+  index.html: |
+    <!doctype html>
+    <html>
+      <head><title>Welcome to basic on vigie</title></head>
+      <body><h1>Welcome to basic on vigie</h1></body>
+    </html>

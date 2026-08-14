@@ -19,11 +19,11 @@ tests:
       - name: pinned
         set:
           image.tag: "2.0.0"
-        want: "myrepo/app:2.0.0"
+        want: "nginx:2.0.0"
       - name: floating
         set:
           image.tag: latest
-        want: "myrepo/app:latest"
+        want: "nginx:latest"
     target:
       kind: Deployment
     asserts:
