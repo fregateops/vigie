@@ -37,13 +37,13 @@ tests:
           value: basic
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "myrepo/app:1.2.3"
+          value: "nginx:stable-alpine"
       - equal:
           path: spec.template.spec.containers[0].imagePullPolicy
           value: IfNotPresent
       - matchRegex:
           path: spec.template.spec.containers[0].image
-          pattern: '^myrepo/app:[0-9.]+$'
+          pattern: '^nginx:[a-z0-9.-]+$'
       - equal:
           path: spec.template.spec.containers[0].ports[0].containerPort
           value: 80
@@ -52,7 +52,7 @@ tests:
           value: http
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.httpGet.path
-          value: /healthz
+          value: /
       - equal:
           path: spec.template.spec.containers[0].resources.limits.cpu
           value: 500m

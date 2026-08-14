@@ -11,11 +11,11 @@ snapshot/matches the rendered Deployment spec[0]:
                 app.kubernetes.io/name: basic
         spec:
             containers:
-                - image: myrepo/app:1.2.3
+                - image: nginx:stable-alpine
                   imagePullPolicy: IfNotPresent
                   livenessProbe:
                     httpGet:
-                        path: /healthz
+                        path: /
                         port: http
                   name: basic
                   ports:
@@ -24,7 +24,7 @@ snapshot/matches the rendered Deployment spec[0]:
                       protocol: TCP
                   readinessProbe:
                     httpGet:
-                        path: /readyz
+                        path: /
                         port: http
                   resources:
                     limits:

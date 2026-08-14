@@ -1,0 +1,216 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/fregateops/vigie/refs/heads/main/pkg/api/schema/v1/testfile.json
+suite: apply-tier matcher showcase
+
+# Every apply-tier matcher exercised against a real cluster the user already
+# has. Run with:
+#   vigie test testdata/charts/basic --cluster kubeconfig --kubeconfig ~/.kube/config
+#
+# The chart's default image is nginx:stable-alpine and its probes hit "/", so
+# pods reach Ready and the Service serves HTTP with no image override here.
+#
+# There is no `templates:` block: that scopes what render returns in the unit
+# tier. In apply tier `helm install` applies the whole chart regardless, so
+# filtering would be a fiction. Scope each test with `target:` instead.
+#
+# Matchers below omit `namespace:` on purpose. The runner allocates a fresh
+# namespace per test (vg-<name>-<hex>); matchers fall back to it.
+#
+# The chart labels every workload with app.kubernetes.io/name=basic and
+# app.kubernetes.io/instance=<release>, and names the container "basic" after
+# the chart. Live matchers select on those.
+
+cluster:
+  backend: kubeconfig
+
+defaults:
+  release:
+    name: myapp
+
+tests:
+
+  # --- applies --------------------------------------------------------------
+  # Resource is accepted by the API server. Implicit in every apply-tier test;
+  # these cases assert on it explicitly.
+
+  - it: Deployment applies cleanly
+    target:
+      kind: Deployment
+    asserts:
+      - applies: {}
+
+  - it: Service applies cleanly
+    target:
+      kind: Service
+    asserts:
+      - applies: {}
+
+  # --- rejected -------------------------------------------------------------
+  # service.port is templated, so an out-of-range port renders fine but the API
+  # server rejects it. Valid ports are 1..65535, so 70000 is a deterministic
+  # rejection across Kubernetes versions.
+
+  - it: Service with an out-of-range port is rejected by the API server
+    inputs:
+      set:
+        service.port: 70000
+    target:
+      kind: Service
+    asserts:
+      - rejected:
+          reason: Invalid
+          message: "(?i)port|range"
+
+  # --- becomesReady ---------------------------------------------------------
+  # Sugar over waitFor for the common "workload is Ready" case.
+
+  - it: becomesReady - the Deployment reports Ready within 90s
+    target:
+      kind: Deployment
+    asserts:
+      - becomesReady:
+          kind: Deployment
+          name: myapp-basic
+          timeout: 90s
+
+  # --- waitFor --------------------------------------------------------------
+  # Wait until a named status condition holds.
+
+  - it: waitFor - the Deployment reaches Available within 90s
+    target:
+      kind: Deployment
+    asserts:
+      - waitFor:
+          kind: Deployment
+          name: myapp-basic
+          condition: Available
+          timeout: 90s
+
+  # --- lookup with then: ----------------------------------------------------
+  # Re-fetch the live object and run unit-tier matchers against it.
+
+  - it: lookup - the live Deployment has the expected replica count
+    asserts:
+      - lookup:
+          kind: Deployment
+          name: myapp-basic
+          within: 30s
+          then:
+            - equal:
+                path: spec.replicas
+                value: 3
+            # metadata.uid is stamped by the API server at create time.
+            - exists:
+                path: metadata.uid
+
+  # --- lookup with forEach: + labelSelector ---------------------------------
+  # List objects by selector and assert against each one.
+
+  - it: lookup forEach - every pod carries the chart selector labels
+    asserts:
+      - lookup:
+          kind: Pod
+          labelSelector: "app.kubernetes.io/name=basic,app.kubernetes.io/instance=myapp"
+          within: 60s
+          forEach:
+            - isSubset:
+                path: metadata.labels
+                content:
+                  app.kubernetes.io/name: basic
+                  app.kubernetes.io/instance: myapp
+
+  # --- eventEmitted ---------------------------------------------------------
+  # ScalingReplicaSet is the most reliable event a vanilla Deployment emits.
+
+  - it: eventEmitted - ScalingReplicaSet fires on the Deployment
+    asserts:
+      - eventEmitted:
+          involvedObject:
+            kind: Deployment
+            name: myapp-basic
+          reason: ScalingReplicaSet
+          type: Normal
+          within: 60s
+
+  # --- logsContain ----------------------------------------------------------
+  # nginx prints "start worker process" on startup. Select by label because pod
+  # names carry a random ReplicaSet suffix. Gate on Ready first so the pod
+  # exists before the log stream opens.
+
+  - it: logsContain - the nginx startup line appears within 60s
+    asserts:
+      - becomesReady:
+          kind: Deployment
+          name: myapp-basic
+          timeout: 90s
+      - logsContain:
+          pod:
+            labelSelector: "app.kubernetes.io/name=basic,app.kubernetes.io/instance=myapp"
+          container: basic
+          pattern: "start worker process"
+          within: 60s
+
+  # --- http via portforward -------------------------------------------------
+  # Reach the Service through the API server's portforward proxy - no LB or
+  # Ingress needed. Gate on Ready so there is a backing pod to tunnel to.
+
+  - it: http portforward - the nginx welcome page returns 200
+    asserts:
+      - becomesReady:
+          kind: Deployment
+          name: myapp-basic
+          timeout: 90s
+      - http:
+          via: portforward
+          target:
+            kind: Service
+            name: myapp-basic
+            port: 80
+          path: /
+          method: GET
+          timeout: 30s
+          retries:
+            count: 5
+            interval: 5s
+            # CEL bindings in retries.until are bare: status, body, headers.
+            until: "status == 200"
+          assert:
+            status: 200
+            bodyContains: "Welcome to nginx"
+
+  # --- matrix + applies -----------------------------------------------------
+  # Each replica count gets its own namespace under apply tier.
+
+  - it: matrix - several replica counts all apply
+    matrix:
+      count: [1, 2, 3]
+    inputs:
+      set:
+        replicaCount: ${{ matrix.count }}
+    target:
+      kind: Deployment
+    asserts:
+      - applies: {}
+
+  # --- cases + lookup -------------------------------------------------------
+  # Two named scenarios, each re-fetching the live Service to confirm the
+  # override reached the API side.
+
+  - it: cases - the service port override is visible on the live Service
+    cases:
+      - name: default-port
+        set:
+          service.port: 80
+        expectedPort: 80
+      - name: custom-port
+        set:
+          service.port: 8080
+        expectedPort: 8080
+    asserts:
+      - lookup:
+          kind: Service
+          name: myapp-basic
+          within: 30s
+          then:
+            - equal:
+                path: spec.ports[0].port
+                value: ${{ case.expectedPort }}
