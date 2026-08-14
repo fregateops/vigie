@@ -18,8 +18,13 @@ test: pre-commit ## Run pre-commit hooks then the Go test suite
 	go test ./...
 
 smoke: build ## Cheap end-to-end check: lint + test the example chart (CHART=...)
+	@echo "Running smoke test on chart: $(CHART)"
+	@echo "Linting chart: $(CHART)"
 	$(BIN) lint $(CHART)
+	@echo "Running vigie test on chart: $(CHART)"
 	$(BIN) test $(CHART)
+	@echo "Running vigie test on chart: $(CHART) with envtest cluster"
+	$(BIN) test $(CHART) --cluster envtest
 
 lint: ## Run golangci-lint
 	golangci-lint run ./...
