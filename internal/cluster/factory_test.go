@@ -57,6 +57,16 @@ func TestNew_kind(t *testing.T) {
 	}
 }
 
+func TestNew_k3d(t *testing.T) {
+	backend, err := cluster.New(cluster.Config{Type: "k3d"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if backend == nil {
+		t.Fatal("expected non-nil backend")
+	}
+}
+
 func TestNew_unknown(t *testing.T) {
 	_, err := cluster.New(cluster.Config{Type: "bogus"})
 	if err == nil {
