@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/fregateops/vigie/internal/cluster/envtest"
+	"github.com/fregateops/vigie/internal/cluster/k3d"
 	"github.com/fregateops/vigie/internal/cluster/kind"
 	"github.com/fregateops/vigie/internal/cluster/kubeconfig"
 )
@@ -18,9 +19,10 @@ const DefaultType = "envtest"
 // New returns a Backend matching cfg.Type. Empty Type defaults to envtest.
 //
 // envtest (in-process apiserver), kubeconfig (an external cluster the user
-// already runs), and kind (a node-backed cluster provisioned on the fly) are
-// available; the k3d and simulated backends arrive in later milestones and
-// currently return an error so misconfiguration fails loudly.
+// already runs), and the node-backed kind and k3d backends (each provisions a
+// throwaway cluster on the fly) are available; the simulated backend arrives
+// in a later milestone and currently returns an error so misconfiguration
+// fails loudly.
 func New(cfg Config) (Backend, error) {
 	backendType := cfg.Type
 	if backendType == "" {
@@ -31,13 +33,15 @@ func New(cfg Config) (Backend, error) {
 		return envtest.New(cfg.KubeVersion), nil
 	case "kind":
 		return kind.New(clusterSessionName("vigie-kind"), cfg.KubeVersion, cfg.ExtraArgs), nil
+	case "k3d":
+		return k3d.New(clusterSessionName("vigie-k3d"), cfg.KubeVersion, cfg.ExtraArgs), nil
 	case "kubeconfig":
 		if cfg.Kubeconfig == "" {
 			return nil, fmt.Errorf("kubeconfig backend requires a non-empty kubeconfig path")
 		}
 		return kubeconfig.New(cfg.Kubeconfig), nil
 	default:
-		return nil, fmt.Errorf("unknown cluster backend %q: valid values are envtest, kind, kubeconfig", backendType)
+		return nil, fmt.Errorf("unknown cluster backend %q: valid values are envtest, kind, k3d, kubeconfig", backendType)
 	}
 }
 
