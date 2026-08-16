@@ -48,8 +48,8 @@ func k3dSpec(userPath string) ToolSpec {
 }
 
 // ResolveK3d locates a usable k3d CLI (user path, PATH, cache, or download).
-func ResolveK3d(ctx context.Context, userPath string, policy DownloadPolicy, confirm func(prompt string) bool, progress io.Writer) (ResolvedTool, error) {
-	return ResolveTool(ctx, k3dSpec(userPath), policy, confirm, progress)
+func ResolveK3d(ctx context.Context, opts ResolveOptions) (ResolvedTool, error) {
+	return ResolveTool(ctx, k3dSpec(opts.Binary), opts.Policy, opts.Confirm, opts.Progress)
 }
 
 // CheckK3d reports k3d availability for `vigie doctor` without downloading.

@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/fregateops/vigie/internal/cluster/kind"
+	"github.com/fregateops/vigie/internal/doctor"
 )
 
 // requireKind skips when the kind CLI or a container runtime is unavailable -
@@ -34,7 +35,7 @@ func TestKindBackend_StartApplyStop(t *testing.T) {
 	requireKind(t)
 
 	clusterName := fmt.Sprintf("vigie-kind-%x", rand.Uint32())
-	backend := kind.New(clusterName, "", nil, kind.Options{})
+	backend := kind.New(clusterName, "", nil, doctor.ResolveOptions{})
 	ctx := context.Background()
 
 	if err := backend.Start(ctx); err != nil {
@@ -81,7 +82,7 @@ func TestKindBackend_StopIdempotent(t *testing.T) {
 	requireKind(t)
 
 	clusterName := fmt.Sprintf("vigie-kind-%x", rand.Uint32())
-	backend := kind.New(clusterName, "", nil, kind.Options{})
+	backend := kind.New(clusterName, "", nil, doctor.ResolveOptions{})
 	ctx := context.Background()
 
 	// Stop without Start should be safe.

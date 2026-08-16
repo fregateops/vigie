@@ -45,8 +45,8 @@ func kindSpec(userPath string) ToolSpec {
 }
 
 // ResolveKind locates a usable kind CLI (user path, PATH, cache, or download).
-func ResolveKind(ctx context.Context, userPath string, policy DownloadPolicy, confirm func(prompt string) bool, progress io.Writer) (ResolvedTool, error) {
-	return ResolveTool(ctx, kindSpec(userPath), policy, confirm, progress)
+func ResolveKind(ctx context.Context, opts ResolveOptions) (ResolvedTool, error) {
+	return ResolveTool(ctx, kindSpec(opts.Binary), opts.Policy, opts.Confirm, opts.Progress)
 }
 
 // CheckKind reports kind availability for `vigie doctor` without downloading.
