@@ -200,18 +200,9 @@ func envtestVersionExpr(kubeVersion string) string {
 }
 
 // envtestCacheDir returns the vigie-managed envtest cache directory,
-// honoring XDG_CACHE_HOME on Linux.
+// honoring XDG_CACHE_HOME on Linux. githubBinaryCacheDir lives in
+// k8s_binary_download.go, shared with the other GitHub-released tools.
 func envtestCacheDir() (string, error) { return githubBinaryCacheDir("envtest") }
-
-// githubBinaryCacheDir returns the vigie-managed cache directory for a named
-// binary group (e.g. "envtest"), rooted at the OS user cache dir.
-func githubBinaryCacheDir(subDir string) (string, error) {
-	base, err := userCacheDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(base, "vigie", subDir), nil
-}
 
 // restoreWritableDirs walks root and adds user-write permission (u+w) to every
 // directory. setup-envtest extracts archives with 0555 so directories end up
