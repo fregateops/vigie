@@ -2,12 +2,12 @@
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 
-> **Status: template, validate, and the envtest + kubeconfig apply tiers shipped.** `vigie lint`,
-> `vigie test` (render + assertions, `--cluster envtest` to install each test against a
-> real API server, and `--cluster kubeconfig` to run integration tests — dependencies,
-> lifecycle hooks, and live-cluster matchers — against a cluster you already have),
-> `vigie validate` (kubeconform), and `vigie schema` work end to end.
-> Self-provisioned cluster backends (kind/k3d, simulated) are on the [roadmap](#roadmap).
+> **Status: template, validate, and the envtest + kubeconfig + kind/k3d apply tiers shipped.**
+> `vigie lint`, `vigie test` (render + assertions; `--cluster envtest` to install each test
+> against a real API server, `--cluster kubeconfig` to run integration tests — dependencies,
+> lifecycle hooks, and live-cluster matchers — against a cluster you already have, and
+> `--cluster kind|k3d` to provision a throwaway node cluster), `vigie validate` (kubeconform),
+> and `vigie schema` work end to end. The `simulated` backend is on the [roadmap](#roadmap).
 
 A single CLI and declarative YAML DSL for testing Helm charts across progressively
 higher-fidelity tiers — from fast in-process template rendering to full end-to-end cluster
@@ -34,8 +34,25 @@ and assert on the live objects.
 | `none` (default) | `helm template` in-process | Template logic produces the expected YAML | ✅ shipped |
 | `envtest` | real kube-apiserver + etcd, no controllers | The API server accepts the resources | ✅ shipped |
 | `kubeconfig` | a cluster you already have | Integration tests (deps, hooks, live matchers) against a real cluster you provide | ✅ shipped |
+| `kind` / `k3d` | provisioned throwaway node cluster | Workloads run, real network and probes | ✅ shipped |
 | `simulated` | envtest + controllers + kwok | Controllers reconcile, Pods start | TODO |
-| `kind` / `k3d` | provisioned throwaway node cluster | Workloads run, real network and probes | TODO |
+
+### Node-backed backends (`kind`, `k3d`)
+
+`--cluster kind` and `--cluster k3d` provision a throwaway cluster, so integration tests run
+with **no pre-existing cluster**. Both drive the upstream CLI (vigie does not embed them) and
+need a container runtime — **docker or podman** — on the host.
+
+vigie resolves the `kind`/`k3d` binary in order: an explicit `--kind-binary` / `--k3d-binary`
+path → `$PATH` → the vigie cache → download. Downloads are opt-in: on an interactive terminal
+vigie prompts for confirmation; in CI or with piped stdin it never downloads and errors with
+install guidance instead, unless you pass `--download-tools` (or set `VIGIE_AUTO_DOWNLOAD=1`).
+Minimum supported versions: **kind ≥ v0.20.0**, **k3d ≥ v5.4.0**.
+
+Backend-specific provisioning flags go through `testApply.cluster.extraArgs` in `.vigie.yaml`
+(e.g. a kind `--config` for a multi-node topology). Downloaded binaries are statically-linked
+Go executables that run on NixOS as-is; a `nix profile install kind k3d` is picked up from
+`$PATH` before any download.
 
 ---
 
@@ -304,7 +321,7 @@ vigie lint [chart]            static analysis: chart-yaml, best-practices, depre
   --kube-version <ver>        target Kubernetes API version for deprecation checks
 
 vigie test [chart]            render + assert; --cluster raises fidelity to a live backend
-  --cluster <backend>         none|envtest|kubeconfig (default: none)
+  --cluster <backend>         none|envtest|kubeconfig|kind|k3d (default: none)
   --file <path>               run a single test file instead of discovering all
   --tests <dir>               discovery root (default: <chart>/tests)
   --match <regex>             run only tests whose display name matches
@@ -315,6 +332,9 @@ vigie test [chart]            render + assert; --cluster raises fidelity to a li
   --snapshot-dir <dir>        snapshot directory (default: <chart>/tests/snapshots)
   --kubeconfig <path>         kubeconfig for --cluster kubeconfig
   --keep-cluster              keep the cluster after the run (node-backed backends)
+  --kind-binary <path>        kind CLI to use (default: PATH, then vigie cache, then download)
+  --k3d-binary <path>         k3d CLI to use (default: PATH, then vigie cache, then download)
+  --download-tools            download a missing kind/k3d CLI unattended (CI/automation; also VIGIE_AUTO_DOWNLOAD)
   --pass-on-warning           exit 0 on run warnings, e.g. no tests executed (default: exit 5)
   -p, --parallelism <n>       parallel test files (default: CPU count)
 
@@ -364,6 +384,12 @@ test:
   testsDir: tests/unit
   skipSchema: false          # kubeconform runs per test by default; true opts out
   kubeVersions: [1.36.1]     # kubeconform runs once per version (matrix)
+
+testApply:                   # the apply tier of `vigie test --cluster <backend>`
+  cluster:
+    type: envtest            # envtest|kubeconfig|kind|k3d
+    kubeVersion: 1.36.1
+    extraArgs: []            # kind/k3d only, e.g. ["--config", "kind-3node.yaml"]
 ```
 
 ### Lint rule sets
@@ -407,8 +433,8 @@ Features land milestone by milestone; each is independently releasable.
 | M4 | ✅ | `vigie validate` (kubeconform), JSON/SARIF/TAP reporters, CI annotations |
 | M5 | ✅ | Distribution: Helm plugin, install scripts, pre-commit hook manifest |
 | M6 | ✅ | `vigie test --cluster envtest` — apply tier against a real API server |
-| M7 | 🔜 | `vigie test --cluster kubeconfig` + integration format (deps, hooks, live matchers) |
-| M8 | 🔜 | `vigie test --cluster kind\|k3d` — self-provisioned e2e clusters |
+| M7 | ✅ | `vigie test --cluster kubeconfig` + integration format (deps, hooks, live matchers) |
+| M8 | ✅ | `vigie test --cluster kind\|k3d` — self-provisioned e2e clusters |
 | M9 | 🔜 | `vigie test --cluster simulated` — envtest + controllers + kwok |
 | M10 | 🔜 | `vigie doctor`, `vigie run`, docs site, `watch`/`--changed` |
 

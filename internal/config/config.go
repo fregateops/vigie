@@ -146,6 +146,11 @@ type ClusterConfig struct {
 	// Kubeconfig is the path to a kubeconfig file used when Type is
 	// "kubeconfig". Mirrors `helm --kubeconfig`.
 	Kubeconfig string `yaml:"kubeconfig"`
+	// ExtraArgs are additional flags passed verbatim to the node-backed
+	// backends' provisioning CLI (kind/k3d). Ignored by envtest/kubeconfig.
+	// Example: ["--config", "kind-3node.yaml"] for kind, or ["-v", "/host:/node"]
+	// for k3d.
+	ExtraArgs []string `yaml:"extraArgs"`
 }
 
 type Defaults struct {
