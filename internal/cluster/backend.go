@@ -6,8 +6,11 @@ package cluster
 
 import (
 	"context"
+	"io"
 
 	"k8s.io/client-go/rest"
+
+	"github.com/fregateops/vigie/internal/doctor"
 )
 
 // Backend abstracts the Kubernetes control plane that the apply-tier runner
@@ -53,4 +56,18 @@ type Config struct {
 	// ExtraArgs are additional flags passed verbatim to the backend's server
 	// process (honoured by the node-backed backends kind and k3d).
 	ExtraArgs []string
+	// KindBinary / K3dBinary override the auto-resolved CLI path for the
+	// corresponding backend (from --kind-binary / --k3d-binary). Empty means
+	// resolve from PATH, then the vigie cache, then an optional download.
+	KindBinary string
+	K3dBinary  string
+	// ToolDownload controls whether a missing kind/k3d CLI may be fetched. The
+	// zero value (doctor.DownloadNever) never downloads and errors with install
+	// guidance instead - the safe default for CI.
+	ToolDownload doctor.DownloadPolicy
+	// ConfirmDownload, when set, is asked before an interactive tool download.
+	ConfirmDownload func(prompt string) bool
+	// Progress receives tool-resolution progress (download bars, warnings).
+	// Nil discards it.
+	Progress io.Writer
 }

@@ -16,15 +16,25 @@ import (
 	"github.com/fregateops/vigie/internal/cluster/kind"
 )
 
-func TestKindBackend_StartApplyStop(t *testing.T) {
+// requireKind skips when the kind CLI or a container runtime is unavailable -
+// the backend now shells out to kind, so both are prerequisites.
+func requireKind(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("kind"); err != nil {
+		t.Skip("kind not found in PATH; skipping kind integration test")
+	}
 	if _, err := exec.LookPath("docker"); err != nil {
 		if _, podmanErr := exec.LookPath("podman"); podmanErr != nil {
 			t.Skip("neither docker nor podman found in PATH; skipping kind integration test")
 		}
 	}
+}
+
+func TestKindBackend_StartApplyStop(t *testing.T) {
+	requireKind(t)
 
 	clusterName := fmt.Sprintf("vigie-kind-%x", rand.Uint32())
-	backend := kind.New(clusterName, "", nil)
+	backend := kind.New(clusterName, "", nil, kind.Options{})
 	ctx := context.Background()
 
 	if err := backend.Start(ctx); err != nil {
@@ -68,14 +78,10 @@ func TestKindBackend_StartApplyStop(t *testing.T) {
 }
 
 func TestKindBackend_StopIdempotent(t *testing.T) {
-	if _, err := exec.LookPath("docker"); err != nil {
-		if _, podmanErr := exec.LookPath("podman"); podmanErr != nil {
-			t.Skip("neither docker nor podman found in PATH; skipping kind integration test")
-		}
-	}
+	requireKind(t)
 
 	clusterName := fmt.Sprintf("vigie-kind-%x", rand.Uint32())
-	backend := kind.New(clusterName, "", nil)
+	backend := kind.New(clusterName, "", nil, kind.Options{})
 	ctx := context.Background()
 
 	// Stop without Start should be safe.
