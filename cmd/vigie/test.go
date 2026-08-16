@@ -1,18 +1,22 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/fregateops/vigie/internal/cienv"
 	"github.com/fregateops/vigie/internal/cluster"
 	"github.com/fregateops/vigie/internal/config"
+	"github.com/fregateops/vigie/internal/doctor"
 	"github.com/fregateops/vigie/internal/runner"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var (
@@ -28,6 +32,9 @@ var (
 	flagTestKeepCluster     bool
 	flagTestMatch           string
 	flagTestUpdateSnapshots bool
+	flagTestKindBinary      string
+	flagTestK3dBinary       string
+	flagTestDownloadTools   bool
 )
 
 // clusterNone is the default --cluster value: run the in-process template tier
@@ -47,8 +54,9 @@ var testCmd = &cobra.Command{
 		"and assertions run against the rendered manifests. Pass --cluster to install each\n" +
 		"test's chart into a real control plane and assert against the live objects:\n\n" +
 		"  envtest     real kube-apiserver + etcd, no controllers (fast, dependency-free)\n" +
-		"  kubeconfig  a cluster you already run, reached via an external kubeconfig\n\n" +
-		"simulated, kind, and k3d arrive in later releases.",
+		"  kubeconfig  a cluster you already run, reached via an external kubeconfig\n" +
+		"  kind, k3d   a throwaway node-backed cluster provisioned via the kind/k3d CLI\n\n" +
+		"simulated arrives in a later release.",
 	Example: `  # Template tier: render every tests/*_test.yaml under the chart
   vigie test ./mychart
 
@@ -57,6 +65,9 @@ var testCmd = &cobra.Command{
 
   # Integration tier: run against a cluster you already have
   vigie test ./mychart --cluster kubeconfig --kubeconfig ~/.kube/config
+
+  # E2e tier: provision a throwaway kind cluster (kind resolved from PATH)
+  vigie test ./mychart --cluster kind
 
   # Run a single test file and emit JUnit for CI
   vigie test ./mychart --file tests/unit/deployment_test.yaml -o junit`,
@@ -78,6 +89,9 @@ func init() {
 	testCmd.Flags().BoolVar(&flagTestKeepCluster, "keep-cluster", false, "Keep the cluster running after the suite for debugging (node-backed backends only)")
 	testCmd.Flags().StringVar(&flagTestMatch, "match", "", "Run only tests whose display name matches this regex")
 	testCmd.Flags().BoolVarP(&flagTestUpdateSnapshots, "update-snapshots", "u", false, "Update snapshots on mismatch instead of failing")
+	testCmd.Flags().StringVar(&flagTestKindBinary, "kind-binary", "", "Path to the kind CLI (default: resolve from PATH, then the vigie cache, then download)")
+	testCmd.Flags().StringVar(&flagTestK3dBinary, "k3d-binary", "", "Path to the k3d CLI (default: resolve from PATH, then the vigie cache, then download)")
+	testCmd.Flags().BoolVar(&flagTestDownloadTools, "download-tools", false, "Download a missing kind/k3d CLI without prompting (for CI/automation; also VIGIE_AUTO_DOWNLOAD)")
 	rootCmd.AddCommand(testCmd)
 }
 
@@ -222,7 +236,38 @@ func resolveClusterConfig(cfg *config.Config) cluster.Config {
 	if flagTestKubeconfig != "" {
 		resolved.Kubeconfig = flagTestKubeconfig
 	}
+	// Node-backed backends (kind, k3d) resolve their CLI; carry the binary
+	// overrides and the download policy. Other backends ignore these fields.
+	resolved.KindBinary = flagTestKindBinary
+	resolved.K3dBinary = flagTestK3dBinary
+	resolved.ToolDownload, resolved.ConfirmDownload = toolDownloadPolicy()
+	resolved.Progress = os.Stderr
 	return resolved
+}
+
+// toolDownloadPolicy decides whether a missing kind/k3d CLI may be fetched.
+// An explicit opt-in (--download-tools / VIGIE_AUTO_DOWNLOAD) downloads without
+// prompting; an interactive terminal (not CI) prompts for confirmation;
+// everything else (CI, piped stdin) never downloads and errors with guidance.
+func toolDownloadPolicy() (doctor.DownloadPolicy, func(prompt string) bool) {
+	if flagTestDownloadTools || os.Getenv("VIGIE_AUTO_DOWNLOAD") != "" {
+		return doctor.DownloadAlways, nil
+	}
+	if term.IsTerminal(int(os.Stdin.Fd())) && cienv.Detect() == cienv.KindNone && os.Getenv("CI") == "" {
+		return doctor.DownloadInteractive, confirmDownload
+	}
+	return doctor.DownloadNever, nil
+}
+
+// confirmDownload prompts on stderr and reads a yes/no answer from stdin.
+func confirmDownload(prompt string) bool {
+	fmt.Fprintf(os.Stderr, "%s [y/N]: ", prompt)
+	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil {
+		return false
+	}
+	answer := strings.ToLower(strings.TrimSpace(line))
+	return answer == "y" || answer == "yes"
 }
 
 // emitWarnings prints run warnings to stderr and exits with exitWarnings unless
