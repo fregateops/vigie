@@ -4,9 +4,10 @@
 # uncomment the keys you want to override. Every key is optional; if the file
 # is absent or empty, vigie uses the built-in defaults shown below.
 #
-# This reference documents the surface that ships today (`vigie lint`,
-# `vigie test`). Configuration for `vigie validate` and `vigie test-apply`
-# lands with those commands — see the roadmap in the README.
+# This reference documents the config surface that ships today (`vigie lint`,
+# `vigie test`). Apply-tier (`test --cluster`) config is being reworked and is
+# intentionally omitted here for now; `vigie validate` / `vigie run` config keys
+# are not documented yet either — see the README.
 #
 # Reference: https://github.com/fregateops/vigie
 

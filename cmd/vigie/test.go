@@ -225,6 +225,7 @@ func resolveClusterConfig(cfg *config.Config) cluster.Config {
 		Type:        flagTestCluster,
 		KubeVersion: configured.KubeVersion,
 		Kubeconfig:  configured.Kubeconfig,
+		ExtraArgs:   configured.ExtraArgs,
 	}
 	if len(flagTestKubeVersions) > 0 {
 		resolved.KubeVersion = flagTestKubeVersions[0]

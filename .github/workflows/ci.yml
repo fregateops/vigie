@@ -33,7 +33,7 @@ jobs:
   smoke-cli:
     name: smoke CLI (testdata chart)
     runs-on: ubuntu-latest
-    continue-on-error: true
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
@@ -73,7 +73,7 @@ jobs:
   e2e-cli:
     name: e2e CLI (${{ matrix.backend }})
     runs-on: ubuntu-latest
-    continue-on-error: true
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -92,7 +92,5 @@ jobs:
       - name: test (e2e, ${{ matrix.backend }})
         # ubuntu runners ship docker; --download-tools fetches the kind/k3d CLI
         # into the vigie cache, exercising the resolver's download path end to
-        # end instead of requiring a preinstalled binary. Non-blocking
-        # (continue-on-error): node-image pulls and cluster provisioning are
-        # network-bound and occasionally flaky, and must not gate PRs.
+        # end instead of requiring a preinstalled binary. 
         run: ./vigie test testdata/charts/basic --cluster ${{ matrix.backend }} --download-tools
