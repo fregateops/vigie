@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,10 +14,9 @@ import (
 
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"sigs.k8s.io/kind/pkg/cluster"
-	"sigs.k8s.io/kind/pkg/cluster/nodeutils"
 
 	"github.com/fregateops/vigie/internal/clog"
+	"github.com/fregateops/vigie/internal/doctor"
 )
 
 const (
@@ -28,45 +28,63 @@ const (
 // Start has not completed successfully.
 var errNotStarted = errors.New("kind cluster not started")
 
-// Backend implements the e2e Backend interface using kind as a Go library.
+// Options configures how the backend resolves the kind CLI binary.
+type Options struct {
+	// Binary is an explicit kind path (--kind-binary); "" resolves from PATH,
+	// the vigie cache, then an optional download.
+	Binary string
+	// Policy controls whether a missing kind CLI may be downloaded. The zero
+	// value never downloads.
+	Policy doctor.DownloadPolicy
+	// Confirm is asked before an interactive download; nil declines.
+	Confirm func(prompt string) bool
+	// Progress receives resolution progress and warnings; nil discards them.
+	Progress io.Writer
+}
+
+// Backend implements the cluster Backend interface by driving the external
+// kind CLI. It provisions a throwaway kind cluster and hands back its
+// kubeconfig / REST credentials.
 type Backend struct {
-	mu               sync.Mutex
-	clusterName      string
-	kubeVersion      string
-	extraArgs        []string
-	kubecfgPath      string
-	restConfig       *rest.Config
-	provider         *cluster.Provider
-	containerRuntime string
+	mu          sync.Mutex
+	clusterName string
+	kubeVersion string
+	extraArgs   []string
+	opts        Options
+	kindPath    string
+	kubecfgPath string
+	restConfig  *rest.Config
+	started     bool
 }
 
 // New returns an unstarted kind Backend.
 // clusterName is used as-is; pass a unique name (e.g. derived from a session ID)
 // to avoid collisions between parallel runs.
-func New(clusterName, kubeVersion string, extraArgs []string) *Backend {
+func New(clusterName, kubeVersion string, extraArgs []string, opts Options) *Backend {
 	return &Backend{
 		clusterName: clusterName,
 		kubeVersion: kubeVersion,
 		extraArgs:   extraArgs,
+		opts:        opts,
 	}
 }
 
-// Start creates a kind cluster and blocks until the API server is ready.
+// Start resolves the kind CLI, creates a cluster, and blocks until the API
+// server is ready.
 func (b *Backend) Start(ctx context.Context) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if b.provider != nil {
+	if b.started {
 		return fmt.Errorf("kind cluster %q already started", b.clusterName)
 	}
 
-	providerOpt, runtime, err := detectProvider()
+	resolved, err := doctor.ResolveKind(ctx, b.opts.Binary, b.opts.Policy, b.opts.Confirm, b.opts.Progress)
 	if err != nil {
 		return err
 	}
-	b.containerRuntime = runtime
-	b.provider = cluster.NewProvider(providerOpt)
-	clog.Progress("kind: container runtime=%s cluster=%q", runtime, b.clusterName)
+	b.kindPath = resolved.Path
+	clog.Progress("kind: using %s (%s)", resolved.Path, resolved.Source)
 
 	dataDir, err := os.MkdirTemp("", "vigie-kind-*")
 	if err != nil {
@@ -75,26 +93,19 @@ func (b *Backend) Start(ctx context.Context) error {
 	b.kubecfgPath = filepath.Join(dataDir, "kubeconfig.yaml")
 	clog.Progress("kind: dataDir=%s kubeconfig=%s", dataDir, b.kubecfgPath)
 
-	createOpts := []cluster.CreateOption{
-		cluster.CreateWithKubeconfigPath(b.kubecfgPath),
-		cluster.CreateWithWaitForReady(waitTimeout),
-	}
+	args := []string{"create", "cluster", "--name", b.clusterName, "--kubeconfig", b.kubecfgPath, "--wait", waitTimeout.String()}
 	nodeImage := nodeImageForVersion(b.kubeVersion)
 	if nodeImage != "" {
-		createOpts = append(createOpts, cluster.CreateWithNodeImage(nodeImage))
+		args = append(args, "--image", nodeImage)
 	}
-	if rawCfg, cfgErr := kindConfigFromArgs(b.extraArgs); cfgErr != nil {
-		_ = os.RemoveAll(dataDir)
-		return cfgErr
-	} else if len(rawCfg) > 0 {
-		createOpts = append(createOpts, cluster.CreateWithRawConfig(rawCfg))
-	}
+	args = append(args, b.extraArgs...)
 
 	clog.Progress("kind: creating cluster %q nodeImage=%q (timeout %s)", b.clusterName, nodeImage, waitTimeout)
-	if err := b.provider.Create(b.clusterName, createOpts...); err != nil {
+	if out, createErr := b.runKind(ctx, args...); createErr != nil {
 		_ = os.RemoveAll(dataDir)
-		return fmt.Errorf("creating kind cluster %q: %w", b.clusterName, err)
+		return fmt.Errorf("creating kind cluster %q: %w\n%s", b.clusterName, createErr, out)
 	}
+	b.started = true
 	clog.Progress("kind: cluster %q ready", b.clusterName)
 
 	restCfg, err := clientcmd.BuildConfigFromFlags("", b.kubecfgPath)
@@ -114,20 +125,20 @@ func (b *Backend) Stop(ctx context.Context) error {
 }
 
 func (b *Backend) stopLocked(ctx context.Context) error {
-	if b.provider == nil {
+	if !b.started {
 		return nil
 	}
 	clog.Progress("kind: deleting cluster %q", b.clusterName)
-	if err := b.provider.Delete(b.clusterName, b.kubecfgPath); err != nil {
+	if out, delErr := b.runKind(ctx, "delete", "cluster", "--name", b.clusterName, "--kubeconfig", b.kubecfgPath); delErr != nil {
 		// Treat "cluster not found" as success - idempotent stop.
-		if !strings.Contains(err.Error(), "not found") {
-			return fmt.Errorf("deleting kind cluster %q: %w", b.clusterName, err)
+		if !strings.Contains(strings.ToLower(string(out)), "not found") {
+			return fmt.Errorf("deleting kind cluster %q: %w\n%s", b.clusterName, delErr, out)
 		}
 	}
 	if b.kubecfgPath != "" {
 		_ = os.RemoveAll(filepath.Dir(b.kubecfgPath))
 	}
-	b.provider = nil
+	b.started = false
 	b.kubecfgPath = ""
 	b.restConfig = nil
 	return nil
@@ -139,53 +150,44 @@ func (b *Backend) RESTConfig() *rest.Config { return b.restConfig }
 // Kubeconfig returns the path to a kubeconfig file for the running cluster.
 func (b *Backend) Kubeconfig() string { return b.kubecfgPath }
 
-// LoadImages loads container images from the host container runtime into all cluster nodes.
+// LoadImages loads container images from the host runtime into the cluster
+// nodes via `kind load docker-image`.
 func (b *Backend) LoadImages(ctx context.Context, images []string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if b.provider == nil {
+	if !b.started {
 		return errNotStarted
 	}
-
-	runtime := b.containerRuntime
-	if runtime == "" {
-		runtime = "docker"
+	if len(images) == 0 {
+		return nil
 	}
 
-	clusterNodes, err := b.provider.ListNodes(b.clusterName)
-	if err != nil {
-		return fmt.Errorf("listing kind cluster nodes: %w", err)
+	args := append([]string{"load", "docker-image"}, images...)
+	args = append(args, "--name", b.clusterName)
+	if out, loadErr := b.runKind(ctx, args...); loadErr != nil {
+		return fmt.Errorf("loading images %v into kind cluster %q: %w\n%s", images, b.clusterName, loadErr, out)
 	}
+	return nil
+}
 
-	imageTar, err := os.CreateTemp("", "vigie-kind-images-*.tar")
-	if err != nil {
-		return fmt.Errorf("creating temp file for image archive: %w", err)
-	}
-	imageTarPath := imageTar.Name()
-	if closeErr := imageTar.Close(); closeErr != nil {
-		return fmt.Errorf("closing temp image archive: %w", closeErr)
-	}
-	defer func() { _ = os.Remove(imageTarPath) }()
+// runKind executes the resolved kind binary, selecting the podman provider when
+// docker is absent but podman is present (kind defaults to docker otherwise).
+func (b *Backend) runKind(ctx context.Context, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, b.kindPath, args...)
+	cmd.Env = append(os.Environ(), providerEnv()...)
+	return cmd.CombinedOutput()
+}
 
-	saveArgs := append([]string{"save", "-o", imageTarPath}, images...)
-	saveCmd := exec.CommandContext(ctx, runtime, saveArgs...)
-	if out, saveErr := saveCmd.CombinedOutput(); saveErr != nil {
-		return fmt.Errorf("saving %s images %v: %w\n%s", runtime, images, saveErr, out)
+// providerEnv returns the environment overrides needed to make kind use podman
+// when docker is unavailable. kind defaults to docker and only auto-detects
+// podman via KIND_EXPERIMENTAL_PROVIDER, so we set it explicitly. Empty when
+// docker is present or when neither runtime is found (kind then reports the
+// error itself). Runtime detection lives in doctor to avoid duplication.
+func providerEnv() []string {
+	if doctor.ContainerRuntime() == "podman" {
+		return []string{"KIND_EXPERIMENTAL_PROVIDER=podman"}
 	}
-
-	for _, node := range clusterNodes {
-		archiveFile, openErr := os.Open(imageTarPath)
-		if openErr != nil {
-			return fmt.Errorf("opening image archive: %w", openErr)
-		}
-		loadErr := nodeutils.LoadImageArchive(node, archiveFile)
-		_ = archiveFile.Close()
-		if loadErr != nil {
-			return fmt.Errorf("loading image archive into node %s: %w", node, loadErr)
-		}
-	}
-
 	return nil
 }
 
@@ -198,33 +200,4 @@ func nodeImageForVersion(kubeVersion string) string {
 	ver := strings.TrimPrefix(kubeVersion, "v")
 	// Ensure the version has a "v" prefix for the image tag.
 	return fmt.Sprintf("%s:v%s", defaultNodeImage, ver)
-}
-
-// kindConfigFromArgs parses extraArgs for a --config <path> flag and returns
-// its file contents for use with cluster.CreateWithRawConfig.
-// Returns nil when no --config flag is present.
-func kindConfigFromArgs(args []string) ([]byte, error) {
-	for idx := 0; idx < len(args)-1; idx++ {
-		if args[idx] == "--config" {
-			return os.ReadFile(args[idx+1])
-		}
-	}
-	return nil, nil
-}
-
-// detectProvider returns the appropriate ProviderOption and runtime name,
-// returning a clear error if neither Docker nor Podman is available.
-func detectProvider() (cluster.ProviderOption, string, error) {
-	if _, err := exec.LookPath("docker"); err == nil {
-		return cluster.ProviderWithDocker(), "docker", nil
-	}
-	if _, err := exec.LookPath("podman"); err == nil {
-		return cluster.ProviderWithPodman(), "podman", nil
-	}
-	// Attempt auto-detection as a fallback.
-	opt, err := cluster.DetectNodeProvider()
-	if err != nil {
-		return nil, "", fmt.Errorf("no container runtime found (docker or podman required for kind): %w", err)
-	}
-	return opt, "docker", nil
 }

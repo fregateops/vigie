@@ -5,6 +5,22 @@ import (
 	"strings"
 )
 
+// ContainerRuntime reports the container runtime to use ("docker" or
+// "podman"), preferring docker, or "" when neither binary is on PATH. Unlike
+// DetectContainerRuntime it does not probe the daemon: callers that only need
+// to pick a provider (e.g. kind's KIND_EXPERIMENTAL_PROVIDER) shouldn't require
+// the daemon to be responsive, and a present-but-down daemon still fixes which
+// provider to select.
+func ContainerRuntime() string {
+	if _, err := lookPath("docker"); err == nil {
+		return "docker"
+	}
+	if _, err := lookPath("podman"); err == nil {
+		return "podman"
+	}
+	return ""
+}
+
 // DetectContainerRuntime checks for docker first, then podman. Returns a
 // warning Check on failure (a container runtime is not required for the
 // envtest tier - it is used by `test --cluster kind|k3d`).

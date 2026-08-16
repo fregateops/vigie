@@ -7,6 +7,32 @@ import (
 	"testing"
 )
 
+func TestContainerRuntime(t *testing.T) {
+	cases := []struct {
+		name    string
+		present map[string]string // binary -> resolved path
+		want    string
+	}{
+		{"docker preferred", map[string]string{"docker": "/usr/bin/docker", "podman": "/usr/bin/podman"}, "docker"},
+		{"podman only", map[string]string{"podman": "/usr/bin/podman"}, "podman"},
+		{"neither", map[string]string{}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stubExec(t, func(name string) (string, error) {
+				if path, ok := tc.present[name]; ok {
+					return path, nil
+				}
+				return "", exec.ErrNotFound
+			}, nil)
+
+			if got := ContainerRuntime(); got != tc.want {
+				t.Errorf("ContainerRuntime() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestDetectContainerRuntime(t *testing.T) {
 	t.Run("docker found and version succeeds", func(t *testing.T) {
 		stubExec(t,
