@@ -49,6 +49,22 @@ type ToolSpec struct {
 	InstallHint string
 }
 
+// ResolveOptions carries the caller-supplied inputs the node-backend
+// resolvers (ResolveKind, ResolveK3d) need. Shared so both backends configure
+// resolution identically.
+type ResolveOptions struct {
+	// Binary is an explicit tool path (--kind-binary / --k3d-binary); "" means
+	// resolve from PATH, the cache, then an optional download.
+	Binary string
+	// Policy controls whether a missing tool may be downloaded. The zero value
+	// (DownloadNever) never downloads.
+	Policy DownloadPolicy
+	// Confirm is asked before an interactive download; nil declines.
+	Confirm func(prompt string) bool
+	// Progress receives resolution progress and warnings; nil discards them.
+	Progress io.Writer
+}
+
 // ResolvedTool is a located, validated tool binary.
 type ResolvedTool struct {
 	Path    string

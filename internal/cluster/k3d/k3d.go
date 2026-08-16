@@ -18,6 +18,7 @@ import (
 
 	"github.com/fregateops/vigie/internal/clog"
 	"github.com/fregateops/vigie/internal/cluster/procutil"
+	"github.com/fregateops/vigie/internal/doctor"
 )
 
 // errNotStarted is returned by operations that require a running cluster when
@@ -30,6 +31,7 @@ type Backend struct {
 	clusterName string
 	kubeVersion string
 	extraArgs   []string
+	opts        doctor.ResolveOptions
 	k3dBinPath  string
 	kubecfgPath string
 	restConfig  *rest.Config
@@ -39,11 +41,12 @@ type Backend struct {
 // New returns an unstarted k3d Backend.
 // clusterName is used as-is; pass a unique name (e.g. derived from a session ID)
 // to avoid collisions between parallel runs.
-func New(clusterName, kubeVersion string, extraArgs []string) *Backend {
+func New(clusterName, kubeVersion string, extraArgs []string, opts doctor.ResolveOptions) *Backend {
 	return &Backend{
 		clusterName: clusterName,
 		kubeVersion: kubeVersion,
 		extraArgs:   extraArgs,
+		opts:        opts,
 	}
 }
 
@@ -52,11 +55,13 @@ func (b *Backend) Start(ctx context.Context) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	k3dPath, err := exec.LookPath("k3d")
+	resolved, err := doctor.ResolveK3d(ctx, b.opts)
 	if err != nil {
-		return fmt.Errorf("k3d binary not found in PATH (install from https://k3d.io): %w", err)
+		return err
 	}
+	k3dPath := resolved.Path
 	b.k3dBinPath = k3dPath
+	clog.Progress("k3d: using %s (%s)", resolved.Path, resolved.Source)
 
 	dataDir, err := os.MkdirTemp("", "vigie-k3d-*")
 	if err != nil {

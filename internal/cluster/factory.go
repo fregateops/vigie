@@ -9,6 +9,7 @@ import (
 	"github.com/fregateops/vigie/internal/cluster/k3d"
 	"github.com/fregateops/vigie/internal/cluster/kind"
 	"github.com/fregateops/vigie/internal/cluster/kubeconfig"
+	"github.com/fregateops/vigie/internal/doctor"
 )
 
 // DefaultType is the cluster backend used when Config.Type is empty.
@@ -32,14 +33,19 @@ func New(cfg Config) (Backend, error) {
 	case "envtest":
 		return envtest.New(cfg.KubeVersion), nil
 	case "kind":
-		return kind.New(clusterSessionName("vigie-kind"), cfg.KubeVersion, cfg.ExtraArgs, kind.Options{
+		return kind.New(clusterSessionName("vigie-kind"), cfg.KubeVersion, cfg.ExtraArgs, doctor.ResolveOptions{
 			Binary:   cfg.KindBinary,
 			Policy:   cfg.ToolDownload,
 			Confirm:  cfg.ConfirmDownload,
 			Progress: cfg.Progress,
 		}), nil
 	case "k3d":
-		return k3d.New(clusterSessionName("vigie-k3d"), cfg.KubeVersion, cfg.ExtraArgs), nil
+		return k3d.New(clusterSessionName("vigie-k3d"), cfg.KubeVersion, cfg.ExtraArgs, doctor.ResolveOptions{
+			Binary:   cfg.K3dBinary,
+			Policy:   cfg.ToolDownload,
+			Confirm:  cfg.ConfirmDownload,
+			Progress: cfg.Progress,
+		}), nil
 	case "kubeconfig":
 		if cfg.Kubeconfig == "" {
 			return nil, fmt.Errorf("kubeconfig backend requires a non-empty kubeconfig path")

@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/fregateops/vigie/internal/cluster/k3d"
+	"github.com/fregateops/vigie/internal/doctor"
 )
 
 func TestK3dBackend_StartApplyStop(t *testing.T) {
@@ -22,7 +23,7 @@ func TestK3dBackend_StartApplyStop(t *testing.T) {
 	}
 
 	clusterName := fmt.Sprintf("vigie-k3d-%x", rand.Uint32())
-	backend := k3d.New(clusterName, "", nil)
+	backend := k3d.New(clusterName, "", nil, doctor.ResolveOptions{})
 	ctx := context.Background()
 
 	if err := backend.Start(ctx); err != nil {
@@ -71,7 +72,7 @@ func TestK3dBackend_StopIdempotent(t *testing.T) {
 	}
 
 	clusterName := fmt.Sprintf("vigie-k3d-%x", rand.Uint32())
-	backend := k3d.New(clusterName, "", nil)
+	backend := k3d.New(clusterName, "", nil, doctor.ResolveOptions{})
 	ctx := context.Background()
 
 	// Stop without Start should be safe.

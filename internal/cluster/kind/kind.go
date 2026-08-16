@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,20 +27,6 @@ const (
 // Start has not completed successfully.
 var errNotStarted = errors.New("kind cluster not started")
 
-// Options configures how the backend resolves the kind CLI binary.
-type Options struct {
-	// Binary is an explicit kind path (--kind-binary); "" resolves from PATH,
-	// the vigie cache, then an optional download.
-	Binary string
-	// Policy controls whether a missing kind CLI may be downloaded. The zero
-	// value never downloads.
-	Policy doctor.DownloadPolicy
-	// Confirm is asked before an interactive download; nil declines.
-	Confirm func(prompt string) bool
-	// Progress receives resolution progress and warnings; nil discards them.
-	Progress io.Writer
-}
-
 // Backend implements the cluster Backend interface by driving the external
 // kind CLI. It provisions a throwaway kind cluster and hands back its
 // kubeconfig / REST credentials.
@@ -50,7 +35,7 @@ type Backend struct {
 	clusterName string
 	kubeVersion string
 	extraArgs   []string
-	opts        Options
+	opts        doctor.ResolveOptions
 	kindPath    string
 	kubecfgPath string
 	restConfig  *rest.Config
@@ -60,7 +45,7 @@ type Backend struct {
 // New returns an unstarted kind Backend.
 // clusterName is used as-is; pass a unique name (e.g. derived from a session ID)
 // to avoid collisions between parallel runs.
-func New(clusterName, kubeVersion string, extraArgs []string, opts Options) *Backend {
+func New(clusterName, kubeVersion string, extraArgs []string, opts doctor.ResolveOptions) *Backend {
 	return &Backend{
 		clusterName: clusterName,
 		kubeVersion: kubeVersion,
@@ -79,7 +64,7 @@ func (b *Backend) Start(ctx context.Context) error {
 		return fmt.Errorf("kind cluster %q already started", b.clusterName)
 	}
 
-	resolved, err := doctor.ResolveKind(ctx, b.opts.Binary, b.opts.Policy, b.opts.Confirm, b.opts.Progress)
+	resolved, err := doctor.ResolveKind(ctx, b.opts)
 	if err != nil {
 		return err
 	}
