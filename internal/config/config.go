@@ -12,12 +12,11 @@ import (
 const filename = ".vigie.yaml"
 
 type Config struct {
-	Defaults  Defaults        `yaml:"defaults"`
-	Lint      LintConfig      `yaml:"lint"`
-	Validate  ValidateConfig  `yaml:"validate"`
-	Test      TestConfig      `yaml:"test"`
-	TestApply TestApplyConfig `yaml:"testApply"`
-	Run       RunConfig       `yaml:"run"`
+	Defaults Defaults       `yaml:"defaults"`
+	Lint     LintConfig     `yaml:"lint"`
+	Validate ValidateConfig `yaml:"validate"`
+	Test     TestConfig     `yaml:"test"`
+	Run      RunConfig      `yaml:"run"`
 }
 
 // LintConfig controls which rule sets run and what to ignore.
@@ -92,30 +91,20 @@ type ValidateIgnoreRule struct {
 	MessageRegex string `yaml:"messageRegex"`
 }
 
-// TestConfig controls `vigie test` (template-tier).
+// TestConfig controls `vigie test` — both the template tier (render + assert
+// in-process) and the cluster tiers reached with `--cluster <backend>`.
 type TestConfig struct {
 	// SkipSchema disables the per-test kubeconform pass when true.
 	SkipSchema bool `yaml:"skipSchema"`
 	// KubeVersions used by the per-test kubeconform pass. Has no effect when
 	// SkipSchema is true.
 	KubeVersions []string `yaml:"kubeVersions"`
-	// TestsDir overrides the discovery root for `vigie test`. Relative paths
-	// resolve against the chart directory. Empty falls back to `<chart>/tests`.
-	// The directory is scanned recursively for `*_test.yaml`.
+	// TestsDir overrides the discovery root for `vigie test`, in every tier.
+	// Relative paths resolve against the chart directory. Empty falls back to
+	// `<chart>/tests`. The directory is scanned recursively for `*_test.yaml`.
 	TestsDir string `yaml:"testsDir"`
-}
-
-// TestApplyConfig configures the cluster (apply) tier of `vigie test`. The
-// backend is selected via Cluster.Type — envtest (default), simulated, kind,
-// k3d, or kubeconfig — surfaced on the CLI as `vigie test --cluster <type>`.
-type TestApplyConfig struct {
-	// Cluster pins the backend the apply tier runs against.
+	// Cluster holds the per-backend settings for the cluster tiers.
 	Cluster ClusterConfig `yaml:"cluster"`
-	// TestsDir overrides the discovery root for the apply tier.
-	// Relative paths resolve against the chart directory. Empty falls back
-	// to `<chart>/tests`. The directory is scanned recursively for
-	// `*_test.yaml`.
-	TestsDir string `yaml:"testsDir"`
 }
 
 // RunConfig controls `vigie run` — the orchestrated command that chains
@@ -131,26 +120,51 @@ type RunConfig struct {
 	ApplyTiers []string `yaml:"applyTiers"`
 }
 
-// ClusterConfig selects the cluster backend for the apply tier of `vigie test`.
-// Mirrors
-// internal/cluster.Config but lives in config so charts can pin a backend in
-// `.vigie.yaml` without depending on the cluster package.
+// ClusterConfig groups the per-backend settings for the cluster tiers of
+// `vigie test`. It does not select a backend — `--cluster <backend>` does, and
+// only the matching sub-block is read for a given run. Charts can therefore
+// pin every backend's settings once and switch tiers from the CLI.
 type ClusterConfig struct {
-	// Type selects the implementation: envtest | simulated | kind | k3d | kubeconfig.
-	// Empty defaults to "envtest" — fast and dependency-free.
-	Type string `yaml:"type"`
-	// KubeVersion is the target Kubernetes server version. envtest uses it to
-	// pin the binary asset version; node-backed backends (kind, k3d) use it to
-	// pin the node image.
+	// Envtest configures the in-process apiserver backend (`--cluster envtest`).
+	Envtest EnvtestConfig `yaml:"envtest"`
+	// Kind configures the kind backend (`--cluster kind`).
+	Kind NodeBackendConfig `yaml:"kind"`
+	// K3d configures the k3d backend (`--cluster k3d`).
+	K3d NodeBackendConfig `yaml:"k3d"`
+	// Kubeconfig configures the external-cluster backend (`--cluster kubeconfig`).
+	Kubeconfig KubeconfigBackendConfig `yaml:"kubeconfig"`
+}
+
+// EnvtestConfig configures the envtest backend, which runs a real
+// kube-apiserver and etcd in-process with no controllers.
+type EnvtestConfig struct {
+	// KubeVersion pins the envtest binary asset version. Empty uses the
+	// built-in default. Overridden by `--kube-version`.
 	KubeVersion string `yaml:"kubeVersion"`
-	// Kubeconfig is the path to a kubeconfig file used when Type is
-	// "kubeconfig". Mirrors `helm --kubeconfig`.
-	Kubeconfig string `yaml:"kubeconfig"`
-	// ExtraArgs are additional flags passed verbatim to the node-backed
-	// backends' provisioning CLI (kind/k3d). Ignored by envtest/kubeconfig.
-	// Example: ["--config", "kind-3node.yaml"] for kind, or ["-v", "/host:/node"]
-	// for k3d.
+}
+
+// NodeBackendConfig configures a node-backed backend (kind or k3d), each of
+// which provisions a throwaway cluster by driving its external CLI.
+type NodeBackendConfig struct {
+	// KubeVersion pins the node image version. Empty uses the CLI's default.
+	// Overridden by `--kube-version`.
+	KubeVersion string `yaml:"kubeVersion"`
+	// Binary is the path to the backend's CLI. Empty resolves it from PATH,
+	// then the vigie cache, then an optional download. Overridden by
+	// `--kind-binary` / `--k3d-binary`.
+	Binary string `yaml:"binary"`
+	// ExtraArgs are additional flags passed verbatim to the provisioning CLI.
+	// Example: ["--config", "kind-3node.yaml"] for kind, or
+	// ["-v", "/host:/node"] for k3d.
 	ExtraArgs []string `yaml:"extraArgs"`
+}
+
+// KubeconfigBackendConfig configures the kubeconfig backend, which runs against
+// a cluster the user already operates.
+type KubeconfigBackendConfig struct {
+	// Path is the kubeconfig file to reach the cluster with. Mirrors
+	// `helm --kubeconfig`. Overridden by `--kubeconfig`.
+	Path string `yaml:"path"`
 }
 
 type Defaults struct {
@@ -169,9 +183,6 @@ func DefaultConfig() *Config {
 				Name:      "release-name",
 				Namespace: "default",
 			},
-		},
-		TestApply: TestApplyConfig{
-			Cluster: ClusterConfig{Type: "envtest"},
 		},
 	}
 }
@@ -192,6 +203,9 @@ func Load(chartDir string) (*Config, error) {
 	if len(bytes.TrimSpace(data)) == 0 {
 		return cfg, nil
 	}
+	if err := checkRetiredKeys(data); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	// Strict decoding so a misspelled or misplaced key fails loudly instead of
 	// being silently ignored (e.g. `ruleSet:` for `ruleSets:`).
 	dec := yaml.NewDecoder(bytes.NewReader(data))
@@ -205,11 +219,43 @@ func Load(chartDir string) (*Config, error) {
 	return cfg, nil
 }
 
+// retiredKeys maps top-level keys removed by the v2 config model to the
+// migration hint shown when a stale `.vigie.yaml` still carries them. Strict
+// decoding would reject them anyway, but with a bare "field not found" that
+// says nothing about where the settings moved.
+var retiredKeys = map[string]string{
+	"testApply": "move `testApply.cluster` settings under `test.cluster.<backend>` " +
+		"(envtest, kind, k3d, kubeconfig) and `testApply.testsDir` to `test.testsDir`",
+}
+
+// checkRetiredKeys reports a v1 config key with its v2 home, pointing at the
+// line the key sits on. A malformed or non-mapping document is left to the
+// strict decode, which reports the parse error.
+func checkRetiredKeys(data []byte) error {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil || len(doc.Content) == 0 {
+		return nil
+	}
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return nil
+	}
+	// A mapping's Content alternates key, value — only the keys interest us.
+	for i := 0; i < len(root.Content); i += 2 {
+		key := root.Content[i]
+		if hint, ok := retiredKeys[key.Value]; ok {
+			return fmt.Errorf("line %d: `%s:` was removed in the v2 config model: %s", key.Line, key.Value, hint)
+		}
+	}
+	return nil
+}
+
 // validateConfigKubeVersions vets every Kubernetes version field that feeds a
-// binary download (kubeconform schemas, envtest/kcm/scheduler) so a truncated
-// "1.30" surfaces at config-load time instead of as a 404 from dl.k8s.io.
-// lint.kubeVersions is intentionally skipped — it accepts MAJOR.MINOR and only
-// drives helm template's `.Capabilities.KubeVersion`, no binary download.
+// binary download (kubeconform schemas, envtest/kcm/scheduler) or a node image
+// so a truncated "1.30" surfaces at config-load time instead of as a 404 from
+// dl.k8s.io. lint.kubeVersions is intentionally skipped — it accepts
+// MAJOR.MINOR and only drives helm template's `.Capabilities.KubeVersion`, no
+// binary download.
 func validateConfigKubeVersions(cfg *Config) error {
 	if err := validateKubeVersions("validate.kubeVersions", cfg.Validate.KubeVersions); err != nil {
 		return err
@@ -217,8 +263,18 @@ func validateConfigKubeVersions(cfg *Config) error {
 	if err := validateKubeVersions("test.kubeVersions", cfg.Test.KubeVersions); err != nil {
 		return err
 	}
-	if err := ValidateKubeVersion("testApply.cluster.kubeVersion", cfg.TestApply.Cluster.KubeVersion); err != nil {
-		return err
+	clusterVersions := []struct {
+		field   string
+		version string
+	}{
+		{"test.cluster.envtest.kubeVersion", cfg.Test.Cluster.Envtest.KubeVersion},
+		{"test.cluster.kind.kubeVersion", cfg.Test.Cluster.Kind.KubeVersion},
+		{"test.cluster.k3d.kubeVersion", cfg.Test.Cluster.K3d.KubeVersion},
+	}
+	for _, cv := range clusterVersions {
+		if err := ValidateKubeVersion(cv.field, cv.version); err != nil {
+			return err
+		}
 	}
 	return nil
 }
