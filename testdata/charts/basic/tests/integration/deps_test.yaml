@@ -16,7 +16,7 @@ suite: dependency ordering and lifecycle hooks
 # teardown every test shares.
 
 cluster:
-  backend: kubeconfig
+  backend: kind
 
 defaults:
   release:

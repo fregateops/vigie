@@ -53,19 +53,24 @@ func TestValidateKubeVersion_ErrorMessageMentionsSource(t *testing.T) {
 	}
 }
 
-func TestLoad_RejectsTruncatedKubeVersionInTestApply(t *testing.T) {
-	dir := t.TempDir()
-	writeConfig(t, dir, `testApply:
+func TestLoad_RejectsTruncatedKubeVersionPerClusterBackend(t *testing.T) {
+	for _, backend := range []string{"envtest", "kind", "k3d"} {
+		t.Run(backend, func(t *testing.T) {
+			dir := t.TempDir()
+			writeConfig(t, dir, `test:
   cluster:
-    type: envtest
-    kubeVersion: "1.30"
+    `+backend+`:
+      kubeVersion: "1.30"
 `)
-	_, err := Load(dir)
-	if err == nil {
-		t.Fatal("Load should have rejected truncated kubeVersion, got nil error")
-	}
-	if !strings.Contains(err.Error(), "testApply.cluster.kubeVersion") {
-		t.Errorf("error %q does not point at the offending field", err)
+			_, err := Load(dir)
+			if err == nil {
+				t.Fatal("Load should have rejected truncated kubeVersion, got nil error")
+			}
+			want := "test.cluster." + backend + ".kubeVersion"
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error %q does not point at %s", err, want)
+			}
+		})
 	}
 }
 
@@ -93,10 +98,13 @@ func TestLoad_AcceptsFullSemverEverywhere(t *testing.T) {
 test:
   kubeVersions:
     - "1.36.1"
-testApply:
   cluster:
-    type: envtest
-    kubeVersion: "1.36.1"
+    envtest:
+      kubeVersion: "1.36.1"
+    kind:
+      kubeVersion: "1.36.1"
+    k3d:
+      kubeVersion: "1.36.1"
 `)
 	if _, err := Load(dir); err != nil {
 		t.Fatalf("Load: %v", err)

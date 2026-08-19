@@ -44,13 +44,14 @@ with **no pre-existing cluster**. Both drive the upstream CLI (vigie does not em
 need a container runtime — **docker or podman** — on the host.
 
 vigie resolves the `kind`/`k3d` binary in order: an explicit `--kind-binary` / `--k3d-binary`
-path → `$PATH` → the vigie cache → download. Downloads are opt-in: on an interactive terminal
+path → `test.cluster.<backend>.binary` in `.vigie.yaml` → `$PATH` → the vigie cache → download.
+Downloads are opt-in: on an interactive terminal
 vigie prompts for confirmation; in CI or with piped stdin it never downloads and errors with
 install guidance instead, unless you pass `--download-tools` (or set `VIGIE_AUTO_DOWNLOAD=1`).
 Minimum supported versions: **kind ≥ v0.20.0**, **k3d ≥ v5.4.0**.
 
-Backend-specific provisioning flags go through `testApply.cluster.extraArgs` in `.vigie.yaml`
-(e.g. a kind `--config` for a multi-node topology). Downloaded binaries are statically-linked
+Backend-specific provisioning flags go through `test.cluster.<backend>.extraArgs` in
+`.vigie.yaml` (e.g. a kind `--config` for a multi-node topology). Downloaded binaries are statically-linked
 Go executables that run on NixOS as-is; a `nix profile install kind k3d` is picked up from
 `$PATH` before any download.
 
@@ -293,12 +294,17 @@ tests:
 
 ### Editor autocomplete
 
-`vigie schema` prints the test-file JSON Schema. Reference it from a test file with a
+`vigie schema` prints the test-file JSON Schema, `vigie schema config` the one for
+`.vigie.yaml`. Reference either from the matching file with a
 [yaml-language-server](https://github.com/redhat-developer/yaml-language-server) modeline for
 completion and validation as you type — either the hosted schema:
 
 ```yaml
+# in tests/**/*_test.yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/fregateops/vigie/refs/heads/main/pkg/api/schema/v1/testfile.json
+
+# in .vigie.yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/fregateops/vigie/refs/heads/main/pkg/api/schema/v1/config.json
 ```
 
 or a local copy for offline/pinned use:
@@ -306,7 +312,14 @@ or a local copy for offline/pinned use:
 ```sh
 vigie schema > .vigie.schema.json
 # then:  # yaml-language-server: $schema=./.vigie.schema.json
+
+vigie schema config > .vigie.config.schema.json
+# then:  # yaml-language-server: $schema=./.vigie.config.schema.json
 ```
+
+Both schemas are generated from the Go types they describe (`internal/dsl` and
+`internal/config`), and `.vigie.yaml` is validated against its schema at load time — so a
+mistyped key names itself instead of being silently ignored.
 
 ---
 
@@ -344,7 +357,7 @@ vigie validate [chart]        chart tier: render values.yaml + overlays, validat
   --set / --set-json / --set-literal <k=v>   value overrides (helm semantics)
   -p, --parallelism <n>       parallel scenarios (default: CPU count)
 
-vigie schema                  print the test-file JSON Schema
+vigie schema [target]         print a JSON Schema: testfile (default) or config
 ```
 
 Chart commands default `[chart]` to the current directory, so `vigie test` works from inside a
@@ -381,16 +394,31 @@ validate:
       messageRegex: "networking.k8s.io/v1"
 
 test:
-  testsDir: tests/unit
+  testsDir: tests/unit       # discovery root for every tier
   skipSchema: false          # kubeconform runs per test by default; true opts out
   kubeVersions: [1.36.1]     # kubeconform runs once per version (matrix)
 
-testApply:                   # the apply tier of `vigie test --cluster <backend>`
+  # Per-backend settings for the cluster tiers. These do not select a tier —
+  # `--cluster <backend>` does, and only that backend's block is read.
   cluster:
-    type: envtest            # envtest|kubeconfig|kind|k3d
-    kubeVersion: 1.36.1
-    extraArgs: []            # kind/k3d only, e.g. ["--config", "kind-3node.yaml"]
+    envtest:
+      kubeVersion: 1.36.1    # envtest binary assets (apiserver, etcd)
+    kind:
+      kubeVersion: 1.36.1    # node image
+      binary: ""             # kind CLI; empty = PATH, then cache, then download
+      extraArgs: []          # e.g. ["--config", "kind-3node.yaml"]
+    k3d:
+      kubeVersion: 1.36.1
+      binary: ""
+      extraArgs: []          # e.g. ["-v", "/host:/node"]
+    kubeconfig:
+      path: /home/me/.kube/config   # no `~` expansion; required for --cluster kubeconfig
 ```
+
+CLI flags win over `.vigie.yaml`: `--kube-version`, `--kubeconfig`, `--kind-binary`, and
+`--k3d-binary` each override the selected backend's block. `--download-tools` has no config
+counterpart on purpose — whether a missing CLI may be fetched is an environment concern (TTY vs
+CI), not a per-chart one.
 
 ### Lint rule sets
 

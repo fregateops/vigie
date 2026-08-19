@@ -84,7 +84,7 @@ func init() {
 	testCmd.Flags().BoolVar(&flagTestSchema, "schema", true, "Run the per-test kubeconform pass (template tier)")
 	testCmd.Flags().StringSliceVar(&flagTestKubeVersions, "kube-version", nil, "Kubernetes version(s), repeatable: template tier matrixes kubeconform over all; cluster tier uses the first (default: 1.36.1)")
 	testCmd.Flags().StringVar(&flagTestCluster, "cluster", clusterNone, "Cluster backend for the apply tier: none|envtest|simulated|kind|k3d|kubeconfig (default none = template tier)")
-	testCmd.Flags().StringVar(&flagTestKubeconfig, "kubeconfig", "", "Path to kubeconfig for --cluster kubeconfig (overrides testApply.cluster.kubeconfig)")
+	testCmd.Flags().StringVar(&flagTestKubeconfig, "kubeconfig", "", "Path to kubeconfig for --cluster kubeconfig (overrides test.cluster.kubeconfig.path)")
 	testCmd.Flags().BoolVar(&flagTestFailFast, "fail-fast", false, "Cancel queued tests after the first failure")
 	testCmd.Flags().BoolVar(&flagTestKeepCluster, "keep-cluster", false, "Keep the cluster running after the suite for debugging (node-backed backends only)")
 	testCmd.Flags().StringVar(&flagTestMatch, "match", "", "Run only tests whose display name matches this regex")
@@ -214,19 +214,29 @@ func runTests(ctx context.Context, chartPath string, cfg *config.Config, files [
 	})
 }
 
-// resolveClusterConfig builds the cluster.Config from the --cluster flag,
-// layering --kube-version / --kubeconfig over the chart's testApply.cluster
-// settings. The backend type comes from the flag (already known to be a real
-// backend, not "none"). A cluster pins a single Kubernetes version, so when
-// --kube-version lists several the first wins and the rest are warned about.
+// resolveClusterConfig builds the cluster.Config for the backend named by
+// --cluster (already known to be a real backend, not "none"): it reads that
+// backend's block from `test.cluster.<backend>`, then layers the CLI overrides
+// on top. A cluster pins a single Kubernetes version, so when --kube-version
+// lists several the first wins and the rest are warned about.
 func resolveClusterConfig(cfg *config.Config) cluster.Config {
-	configured := cfg.TestApply.Cluster
-	resolved := cluster.Config{
-		Type:        flagTestCluster,
-		KubeVersion: configured.KubeVersion,
-		Kubeconfig:  configured.Kubeconfig,
-		ExtraArgs:   configured.ExtraArgs,
+	resolved := cluster.Config{Type: flagTestCluster}
+	configured := cfg.Test.Cluster
+	switch flagTestCluster {
+	case "envtest":
+		resolved.KubeVersion = configured.Envtest.KubeVersion
+	case "kind":
+		resolved.KubeVersion = configured.Kind.KubeVersion
+		resolved.ExtraArgs = configured.Kind.ExtraArgs
+		resolved.KindBinary = configured.Kind.Binary
+	case "k3d":
+		resolved.KubeVersion = configured.K3d.KubeVersion
+		resolved.ExtraArgs = configured.K3d.ExtraArgs
+		resolved.K3dBinary = configured.K3d.Binary
+	case "kubeconfig":
+		resolved.Kubeconfig = configured.Kubeconfig.Path
 	}
+
 	if len(flagTestKubeVersions) > 0 {
 		resolved.KubeVersion = flagTestKubeVersions[0]
 		if len(flagTestKubeVersions) > 1 {
@@ -237,10 +247,14 @@ func resolveClusterConfig(cfg *config.Config) cluster.Config {
 	if flagTestKubeconfig != "" {
 		resolved.Kubeconfig = flagTestKubeconfig
 	}
-	// Node-backed backends (kind, k3d) resolve their CLI; carry the binary
-	// overrides and the download policy. Other backends ignore these fields.
-	resolved.KindBinary = flagTestKindBinary
-	resolved.K3dBinary = flagTestK3dBinary
+	if flagTestKindBinary != "" {
+		resolved.KindBinary = flagTestKindBinary
+	}
+	if flagTestK3dBinary != "" {
+		resolved.K3dBinary = flagTestK3dBinary
+	}
+	// The download policy is an environment concern (TTY vs CI), never a
+	// per-chart setting, so it has no `.vigie.yaml` counterpart.
 	resolved.ToolDownload, resolved.ConfirmDownload = toolDownloadPolicy()
 	resolved.Progress = os.Stderr
 	return resolved
