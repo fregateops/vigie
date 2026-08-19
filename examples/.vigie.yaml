@@ -5,9 +5,8 @@
 # is absent or empty, vigie uses the built-in defaults shown below.
 #
 # This reference documents the config surface that ships today (`vigie lint`,
-# `vigie test`). Apply-tier (`test --cluster`) config is being reworked and is
-# intentionally omitted here for now; `vigie validate` / `vigie run` config keys
-# are not documented yet either — see the README.
+# `vigie test`); `vigie validate` / `vigie run` config keys are not documented
+# yet — see the README.
 #
 # Reference: https://github.com/fregateops/vigie
 
@@ -71,12 +70,71 @@ lint:
         - templates/jobs/*.yaml
 
 # ---------------------------------------------------------------------------
-# test — controls `vigie test` (template-tier: per-test render + assertions).
+# test — controls `vigie test`, in every tier: the template tier (per-test
+# render + assertions, the default) and the cluster tiers reached with
+# `--cluster <backend>`.
 #
-# CLI: `vigie test ./mychart [--file f] [--tests dir] [--snapshot-dir dir]`.
+# CLI: `vigie test ./mychart [--file f] [--tests dir] [--snapshot-dir dir]
+#       [--cluster none|envtest|kind|k3d|kubeconfig]`.
 # ---------------------------------------------------------------------------
 test:
   # Directory `vigie test` scans recursively for `*_test.yaml`. Relative
   # paths resolve against the chart directory. Empty/omitted defaults to
   # `<chart>/tests`. Overridden by the `--tests` CLI flag.
   testsDir: tests/unit
+
+  # Disable the per-test kubeconform pass. Default: false (schema runs).
+  # Overridden by the `--schema=false` CLI flag.
+  skipSchema: false
+
+  # Kubernetes versions for the per-test kubeconform pass; each version runs
+  # as a separate pass (matrix). Full `MAJOR.MINOR.PATCH` required.
+  # Empty/omitted uses the built-in default. Overridden by `--kube-version`.
+  kubeVersions:
+    - "1.36.1"
+
+  # -------------------------------------------------------------------------
+  # test.cluster — per-backend settings for the cluster tiers.
+  #
+  # These blocks do NOT select a tier: `vigie test` renders in-process unless
+  # you pass `--cluster <backend>`, and only the selected backend's block is
+  # read. Configure them once here and switch tiers from the CLI.
+  # -------------------------------------------------------------------------
+  cluster:
+    # envtest — a real kube-apiserver + etcd in-process, no controllers.
+    envtest:
+      # Kubernetes version of the envtest binary assets (kube-apiserver, etcd).
+      # Empty/omitted uses the built-in default. Overridden by `--kube-version`.
+      kubeVersion: "1.36.1"
+
+    # kind — a throwaway cluster provisioned by driving the external kind CLI.
+    kind:
+      # Node image version. Empty/omitted uses kind's own default.
+      # Overridden by `--kube-version`.
+      kubeVersion: "1.36.1"
+      # Path to the kind CLI. Empty/omitted resolves it from PATH, then the
+      # vigie binary cache, then an optional download. Overridden by
+      # `--kind-binary`.
+      binary: ""
+      # Extra flags passed verbatim to `kind create cluster`.
+      extraArgs:
+        - --config
+        - kind-3node.yaml
+
+    # k3d — a throwaway k3s cluster provisioned by driving the external k3d CLI.
+    k3d:
+      kubeVersion: "1.36.1"
+      # Path to the k3d CLI; same resolution as kind. Overridden by `--k3d-binary`.
+      binary: ""
+      # Extra flags passed verbatim to `k3d cluster create`.
+      extraArgs:
+        - -v
+        - /host:/node
+
+    # kubeconfig — a cluster you already run, reached via an external kubeconfig.
+    kubeconfig:
+      # Path to the kubeconfig file. Mirrors `helm --kubeconfig`. Required for
+      # `--cluster kubeconfig`. Overridden by the `--kubeconfig` CLI flag.
+      # No shell expansion happens here, so write it out in full rather than
+      # using `~`; relative paths resolve against the working directory.
+      path: /home/me/.kube/config
