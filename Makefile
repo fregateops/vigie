@@ -44,12 +44,12 @@ pre-commit: ## Run all pre-commit hooks against every file
 changelog: ## Generate a changelog from git history
 	git cliff --output CHANGELOG.md
 
-gen-schema: ## Regenerate pkg/api/schema/v1/testfile.json from internal/dsl types
+gen-schema: ## Regenerate the JSON Schemas from internal/dsl and internal/config types
 	go generate ./pkg/api/schema/v1/...
 
-check-schema: ## Fail if testfile.json is out of sync with `go generate`
+check-schema: ## Fail if the generated JSON Schemas are out of sync with `go generate`
 	go generate ./pkg/api/schema/v1/...
-	git diff --exit-code pkg/api/schema/v1/testfile.json
+	git diff --exit-code pkg/api/schema/v1/testfile.json pkg/api/schema/v1/config.json
 
 release-dry-run: ## Preview a release locally (requires goreleaser in PATH)
 	goreleaser release --snapshot --clean

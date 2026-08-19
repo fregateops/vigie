@@ -1,0 +1,281 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/fregateops/vigie/refs/heads/main/pkg/api/schema/v1/config.json",
+  "$defs": {
+    "ClusterConfig": {
+      "properties": {
+        "envtest": {
+          "$ref": "#/$defs/EnvtestConfig",
+          "description": "Envtest configures the in-process apiserver backend (`--cluster envtest`)."
+        },
+        "kind": {
+          "$ref": "#/$defs/NodeBackendConfig",
+          "description": "Kind configures the kind backend (`--cluster kind`)."
+        },
+        "k3d": {
+          "$ref": "#/$defs/NodeBackendConfig",
+          "description": "K3d configures the k3d backend (`--cluster k3d`)."
+        },
+        "kubeconfig": {
+          "$ref": "#/$defs/KubeconfigBackendConfig",
+          "description": "Kubeconfig configures the external-cluster backend (`--cluster kubeconfig`)."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ClusterConfig groups the per-backend settings for the cluster tiers of `vigie test`."
+    },
+    "Defaults": {
+      "properties": {
+        "release": {
+          "$ref": "#/$defs/ReleaseDefaults",
+          "description": "Release is the release identity passed to `helm template`."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "Defaults holds the values every test inherits unless a suite-level `defaults:` or a per-test `inputs:` block overrides them."
+    },
+    "EnvtestConfig": {
+      "properties": {
+        "kubeVersion": {
+          "type": "string",
+          "description": "KubeVersion pins the envtest binary asset version. Empty uses the\nbuilt-in default. Overridden by `--kube-version`."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "EnvtestConfig configures the envtest backend, which runs a real kube-apiserver and etcd in-process with no controllers."
+    },
+    "IgnoreRule": {
+      "properties": {
+        "rule": {
+          "type": "string",
+          "description": "Rule is the namespaced rule ID to suppress, e.g.\n`template-best-practices_missing-resource-limits`."
+        },
+        "paths": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Paths are glob patterns matched against the finding's source file path.\nEmpty suppresses the rule everywhere."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "IgnoreRule suppresses a specific rule, optionally scoped to file paths."
+    },
+    "KubeconfigBackendConfig": {
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Path is the kubeconfig file to reach the cluster with. Mirrors\n`helm --kubeconfig`. No shell expansion happens, so `~` is not a home\ndirectory here. Overridden by `--kubeconfig`."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "KubeconfigBackendConfig configures the kubeconfig backend, which runs against a cluster the user already operates."
+    },
+    "LintConfig": {
+      "properties": {
+        "ruleSets": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "RuleSets is an allowlist of rule sets to run. Empty means \"all defaults\"."
+        },
+        "disableRules": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "DisableRules is a denylist of individual rule IDs that must not run, even\nif their rule set is enabled. Distinct from Ignore, which filters\nfindings post-execution by path."
+        },
+        "kubeVersions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "KubeVersions lists the Kubernetes versions to render against for\ndeprecation and version-aware rules. Each is a `MAJOR.MINOR` string.\nEmpty means \"all supported versions\"."
+        },
+        "ignore": {
+          "items": {
+            "$ref": "#/$defs/IgnoreRule"
+          },
+          "type": "array",
+          "description": "Ignore suppresses findings for a rule, optionally scoped to file paths."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "LintConfig controls which rule sets run and what to ignore."
+    },
+    "NodeBackendConfig": {
+      "properties": {
+        "kubeVersion": {
+          "type": "string",
+          "description": "KubeVersion pins the node image version. Empty uses the CLI's default.\nOverridden by `--kube-version`."
+        },
+        "binary": {
+          "type": "string",
+          "description": "Binary is the path to the backend's CLI. Empty resolves it from PATH,\nthen the vigie cache, then an optional download. Overridden by\n`--kind-binary` / `--k3d-binary`."
+        },
+        "extraArgs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "ExtraArgs are additional flags passed verbatim to the provisioning CLI.\nExample: [\"--config\", \"kind-3node.yaml\"] for kind, or\n[\"-v\", \"/host:/node\"] for k3d."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "NodeBackendConfig configures a node-backed backend (kind or k3d), each of which provisions a throwaway cluster by driving its external CLI."
+    },
+    "ReleaseDefaults": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name is the release name. Mirrors Helm's `--release-name`.\nDefaults to \"release-name\"."
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Namespace is the release namespace. Mirrors Helm's `--namespace`.\nDefaults to \"default\"."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ReleaseDefaults is the Helm release identity used to render every test."
+    },
+    "RunConfig": {
+      "properties": {
+        "applyTiers": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "ApplyTiers selects which cluster backends `vigie run` exercises via the\napply tier. Empty/omitted means \"no apply tiers — just lint+validate+test\".\nValid values: any cluster backend type (envtest, simulated, kind, k3d,\nkubeconfig)."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "RunConfig controls `vigie run` — the orchestrated command that chains lint → validate → test."
+    },
+    "TestConfig": {
+      "properties": {
+        "skipSchema": {
+          "type": "boolean",
+          "description": "SkipSchema disables the per-test kubeconform pass when true."
+        },
+        "kubeVersions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "KubeVersions used by the per-test kubeconform pass. Has no effect when\nSkipSchema is true."
+        },
+        "testsDir": {
+          "type": "string",
+          "description": "TestsDir overrides the discovery root for `vigie test`, in every tier.\nRelative paths resolve against the chart directory. Empty falls back to\n`\u003cchart\u003e/tests`. The directory is scanned recursively for `*_test.yaml`."
+        },
+        "cluster": {
+          "$ref": "#/$defs/ClusterConfig",
+          "description": "Cluster holds the per-backend settings for the cluster tiers."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "TestConfig controls `vigie test` — both the template tier (render + assert in-process) and the cluster tiers reached with `--cluster \u003cbackend\u003e`."
+    },
+    "ValidateConfig": {
+      "properties": {
+        "valuesFiles": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "ValuesFiles lists value overlays to validate, layered on the chart's\n`values.yaml` (helm `-f overlay.yaml` semantics). Each entry produces one\nindependent render+kubeconform pass. Empty means \"just the baseline\nrender against values.yaml\"."
+        },
+        "kubeVersions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "KubeVersions lists Kubernetes versions to validate against. Each\n(overlay × kubeVersion) pair runs as a separate scenario."
+        },
+        "set": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Set holds --set style key=value overrides (helm strvals semantics). Applied\nas the base layer; values files take higher priority."
+        },
+        "setJson": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "SetJSON holds --set-json style key=jsonValue overrides."
+        },
+        "setLiteral": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "SetLiteral holds --set-literal style key=literalString overrides (no type coercion)."
+        },
+        "ignore": {
+          "items": {
+            "$ref": "#/$defs/ValidateIgnoreRule"
+          },
+          "type": "array",
+          "description": "Ignore suppresses specific schema violations."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ValidateConfig controls `vigie validate` (chart-level: render chart with values.yaml + each overlay, then run kubeconform against the rendered docs)."
+    },
+    "ValidateIgnoreRule": {
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Kind is the Kubernetes kind whose findings are suppressed, e.g. `Ingress`."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name is the object name whose findings are suppressed. Empty matches any."
+        },
+        "messageRegex": {
+          "type": "string",
+          "description": "MessageRegex further narrows the suppression to violation messages\nmatching this regular expression. Empty matches any."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ValidateIgnoreRule suppresses a kubeconform finding by kind, name, and optional regex over the violation message."
+    }
+  },
+  "properties": {
+    "defaults": {
+      "$ref": "#/$defs/Defaults"
+    },
+    "lint": {
+      "$ref": "#/$defs/LintConfig"
+    },
+    "validate": {
+      "$ref": "#/$defs/ValidateConfig"
+    },
+    "test": {
+      "$ref": "#/$defs/TestConfig"
+    },
+    "run": {
+      "$ref": "#/$defs/RunConfig"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "title": "Vigie configuration file (.vigie.yaml)",
+  "description": "Config is the root of `.vigie.yaml`, the per-chart configuration file."
+}
