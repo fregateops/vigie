@@ -1,4 +1,9 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/fregateops/vigie/refs/heads/main/pkg/api/schema/v1/config.json
 # .vigie.yaml — vigie per-chart configuration
+#
+# The modeline above gives editors autocomplete and validation for this file.
+# For an offline or pinned copy: `vigie schema config > .vigie.config.schema.json`
+# and point the modeline at it instead.
 #
 # Drop this file at the root of your Helm chart (next to Chart.yaml) and
 # uncomment the keys you want to override. Every key is optional; if the file

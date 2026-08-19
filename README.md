@@ -294,12 +294,17 @@ tests:
 
 ### Editor autocomplete
 
-`vigie schema` prints the test-file JSON Schema. Reference it from a test file with a
+`vigie schema` prints the test-file JSON Schema, `vigie schema config` the one for
+`.vigie.yaml`. Reference either from the matching file with a
 [yaml-language-server](https://github.com/redhat-developer/yaml-language-server) modeline for
 completion and validation as you type — either the hosted schema:
 
 ```yaml
+# in tests/**/*_test.yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/fregateops/vigie/refs/heads/main/pkg/api/schema/v1/testfile.json
+
+# in .vigie.yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/fregateops/vigie/refs/heads/main/pkg/api/schema/v1/config.json
 ```
 
 or a local copy for offline/pinned use:
@@ -307,7 +312,14 @@ or a local copy for offline/pinned use:
 ```sh
 vigie schema > .vigie.schema.json
 # then:  # yaml-language-server: $schema=./.vigie.schema.json
+
+vigie schema config > .vigie.config.schema.json
+# then:  # yaml-language-server: $schema=./.vigie.config.schema.json
 ```
+
+Both schemas are generated from the Go types they describe (`internal/dsl` and
+`internal/config`), and `.vigie.yaml` is validated against its schema at load time — so a
+mistyped key names itself instead of being silently ignored.
 
 ---
 
@@ -345,7 +357,7 @@ vigie validate [chart]        chart tier: render values.yaml + overlays, validat
   --set / --set-json / --set-literal <k=v>   value overrides (helm semantics)
   -p, --parallelism <n>       parallel scenarios (default: CPU count)
 
-vigie schema                  print the test-file JSON Schema
+vigie schema [target]         print a JSON Schema: testfile (default) or config
 ```
 
 Chart commands default `[chart]` to the current directory, so `vigie test` works from inside a
