@@ -78,7 +78,8 @@ go build -o vigie ./cmd/vigie
 
 ## Quick start
 
-Drop test files under `tests/unit/` in your chart:
+Drop test files under `tests/` in your chart — one root for every test file, scanned
+recursively, with sub-directories purely for organisation:
 
 ```yaml
 # mychart/tests/unit/deployment_test.yaml
@@ -125,8 +126,9 @@ Tests: 2 total, 2 passed (2ms total test time)
 ```
 
 A complete, realistic example chart lives in
-[`testdata/charts/basic`](./testdata/charts/basic) — its `tests/unit/` suite exercises the
-full matcher library, `matrix`/`cases`, helper (`call:`) tests, and snapshots.
+[`testdata/charts/basic`](./testdata/charts/basic) — its `tests/` root exercises the full
+matcher library, `matrix`/`cases`, helper (`call:`) tests, and snapshots, plus apply-tier
+suites with dependencies and live matchers.
 
 ---
 
@@ -394,7 +396,7 @@ validate:
       messageRegex: "networking.k8s.io/v1"
 
 test:
-  testsDir: tests/unit       # discovery root for every tier
+  testsDir: tests            # single root holding every test file, scanned recursively
   skipSchema: false          # kubeconform runs per test by default; true opts out
   kubeVersions: [1.36.1]     # kubeconform runs once per version (matrix)
 
