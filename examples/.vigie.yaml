@@ -83,10 +83,13 @@ lint:
 #       [--cluster none|envtest|kind|k3d|kubeconfig]`.
 # ---------------------------------------------------------------------------
 test:
-  # Directory `vigie test` scans recursively for `*_test.yaml`. Relative
-  # paths resolve against the chart directory. Empty/omitted defaults to
-  # `<chart>/tests`. Overridden by the `--tests` CLI flag.
-  testsDir: tests/unit
+  # The single root `vigie test` scans recursively for `*_test.yaml` — it holds
+  # *every* test file, whatever tier each one targets. Sub-directories are for
+  # organisation only (e.g. unit/, integration/); a file's tier comes from its
+  # content and the active `--cluster`, never from where it sits.
+  # Relative paths resolve against the chart directory. Empty/omitted defaults
+  # to `<chart>/tests`. Overridden by the `--tests` CLI flag.
+  testsDir: tests
 
   # Disable the per-test kubeconform pass. Default: false (schema runs).
   # Overridden by the `--schema=false` CLI flag.

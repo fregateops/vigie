@@ -12,6 +12,7 @@ lint:
   disableRules:
     - template-best-practices_missing-resource-limits
 
-test:
-  # Unit tests live under tests/unit (also the default discovery root).
-  testsDir: tests/unit
+# `test:` is omitted on purpose: every test file lives under the default
+# discovery root `<chart>/tests`, scanned recursively. The unit/ and
+# integration/ sub-directories are organisation only — the tier a file runs in
+# comes from its content and the active `--cluster`, never from its path.
