@@ -101,12 +101,6 @@ type Test struct {
 	// Human-readable description of the scenario.
 	It string `yaml:"it" json:"it"`
 
-	// Tiers this test applies to. Default: [template, validate].
-	Tier []string `yaml:"tier" json:"tier,omitempty"`
-
-	// Arbitrary labels for filtering tests.
-	Tags []string `yaml:"tags" json:"tags,omitempty"`
-
 	// Skip condition — boolean or CEL expression string.
 	Skip any `yaml:"skip" json:"skip,omitempty"`
 

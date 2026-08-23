@@ -295,17 +295,6 @@ func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult
 			slog.Debug("skipping test (no match)", "test", et.DisplayName)
 			continue
 		}
-		if !tierApplies(et.Test.Tier, r.activeTier) {
-			slog.Debug("skipping test (tier filter)", "test", et.DisplayName, "tier", et.Test.Tier)
-			sr.Results = append(sr.Results, TestResult{
-				SuiteName:  suite.SuiteName,
-				TestName:   et.DisplayName,
-				Pass:       true,
-				Skipped:    true,
-				SkipReason: fmt.Sprintf("tier %v excludes %s", et.Test.Tier, r.activeTier),
-			})
-			continue
-		}
 		if skip, reason := matcherTierSkip(et.Test.Asserts, r.activeTier); skip {
 			slog.Debug("skipping test (matcher tier requirement)",
 				"test", et.DisplayName, "reason", reason)
@@ -602,21 +591,6 @@ func matcherTierSkip(asserts []dsl.Assertion, activeTier string) (skip bool, rea
 		return false, ""
 	}
 	return true, fmt.Sprintf("%q matcher requires tier %s; active tier is %s", name, needTier, activeTier)
-}
-
-// tierApplies returns true when a test with the given tier list should run
-// under the active tier. An empty/nil tier list means "all tiers". A "*"
-// entry also means "all tiers".
-func tierApplies(testTier []string, active string) bool {
-	if len(testTier) == 0 {
-		return true
-	}
-	for _, t := range testTier {
-		if t == "*" || t == active {
-			return true
-		}
-	}
-	return false
 }
 
 // backendSupportsDeps reports whether a backend supports integration-tier
