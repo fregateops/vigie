@@ -135,6 +135,91 @@ func TestUnrunnableAt(t *testing.T) {
 	}
 }
 
+func TestIntegrationFeatureSkip(t *testing.T) {
+	renderTest := dsl.Test{It: "renders", Asserts: []dsl.Assertion{{Equal: &dsl.PathValue{Path: "kind"}}}}
+	hook := []dsl.LifecycleHook{{}}
+
+	cases := []struct {
+		name     string
+		suite    dsl.Suite
+		tier     string
+		wantSkip bool
+		wantPart string
+	}{
+		{
+			name:     "dependencies below simulated",
+			suite:    dsl.Suite{Dependencies: []dsl.Dependency{{Name: "db"}}, Tests: []dsl.Test{renderTest}},
+			tier:     matchers.TierAPIServer,
+			wantSkip: true,
+			wantPart: "declares dependencies",
+		},
+		{
+			// The premise the author wrote cannot be established, so the tests
+			// must not report on it - this is the hollow pass being closed.
+			name:     "dependencies at e2e are fine",
+			suite:    dsl.Suite{Dependencies: []dsl.Dependency{{Name: "db"}}, Tests: []dsl.Test{renderTest}},
+			tier:     matchers.TierE2E,
+			wantSkip: false,
+		},
+		{
+			name:     "suite hooks below simulated",
+			suite:    dsl.Suite{BeforeAll: hook, Tests: []dsl.Test{renderTest}},
+			tier:     matchers.TierTemplate,
+			wantSkip: true,
+			wantPart: "beforeAll/afterAll",
+		},
+		{
+			name: "per-test hooks below simulated",
+			suite: dsl.Suite{Tests: []dsl.Test{
+				{It: "hooked", Setup: hook, Asserts: renderTest.Asserts},
+			}},
+			tier:     matchers.TierAPIServer,
+			wantSkip: true,
+			wantPart: "setup/teardown",
+		},
+		{
+			name:     "plain suite is unaffected",
+			suite:    dsl.Suite{Tests: []dsl.Test{renderTest}},
+			tier:     matchers.TierTemplate,
+			wantSkip: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			skip, reason := integrationFeatureSkip(&tc.suite, tc.tier)
+			if skip != tc.wantSkip {
+				t.Fatalf("integrationFeatureSkip = %v, want %v (reason %q)", skip, tc.wantSkip, reason)
+			}
+			if !skip {
+				return
+			}
+			if !strings.Contains(reason, tc.wantPart) {
+				t.Errorf("reason %q does not mention %q", reason, tc.wantPart)
+			}
+			if !strings.Contains(reason, "--cluster") {
+				t.Errorf("reason %q names no flag to pass", reason)
+			}
+		})
+	}
+}
+
+func TestTierAtLeast(t *testing.T) {
+	if !tierAtLeast(matchers.TierE2E, matchers.TierSimulated) {
+		t.Error("e2e must satisfy a simulated requirement")
+	}
+	if tierAtLeast(matchers.TierAPIServer, matchers.TierSimulated) {
+		t.Error("apiserver must not satisfy a simulated requirement")
+	}
+	if !tierAtLeast(matchers.TierTemplate, matchers.TierTemplate) {
+		t.Error("a tier must satisfy itself")
+	}
+	// An unknown tier provides nothing rather than accidentally satisfying a
+	// requirement.
+	if tierAtLeast("bogus", matchers.TierTemplate) {
+		t.Error("an unrecognised tier must not satisfy any requirement")
+	}
+}
+
 func TestMatcherTierSkip_ReportsTheOffendingMatcherInsideAComposite(t *testing.T) {
 	// A composite's tier is the intersection of its children, so a cluster-only
 	// matcher nested in allOf must still be named - blaming "allOf" would leave

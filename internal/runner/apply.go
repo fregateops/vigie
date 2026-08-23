@@ -69,9 +69,9 @@ type ApplyOptions struct {
 // RunApply runs the apply tier of `vigie test --cluster`: it starts the
 // configured cluster backend, walks each test file through the apply-tier state machine
 // (LOAD -> EXPAND -> EXECUTE -> REPORT), then stops the backend (unless
-// KeepCluster). Integration-only features (dependencies, lifecycle hooks) are
-// honoured only when the backend supports them; on envtest they are warned and
-// skipped.
+// KeepCluster). A suite declaring integration-only features (dependencies,
+// lifecycle hooks) the active tier cannot provide is skipped whole rather than
+// run with those features dropped.
 func RunApply(ctx context.Context, opts ApplyOptions) ([]SuiteResult, error) {
 	slog.Debug("starting apply runner",
 		"files", len(opts.TestFiles), "parallelism", opts.Parallelism,
@@ -113,13 +113,12 @@ func RunApply(ctx context.Context, opts ApplyOptions) ([]SuiteResult, error) {
 	}
 
 	runner := &applyRunner{
-		opts:        opts,
-		kubeCfg:     restCfg,
-		kubeconfig:  opts.Backend.Kubeconfig(),
-		clientset:   clientset,
-		matchRE:     matchRE,
-		activeTier:  backendTier(opts.BackendType),
-		integration: backendSupportsDeps(opts.BackendType),
+		opts:       opts,
+		kubeCfg:    restCfg,
+		kubeconfig: opts.Backend.Kubeconfig(),
+		clientset:  clientset,
+		matchRE:    matchRE,
+		activeTier: backendTier(opts.BackendType),
 	}
 
 	return runner.run(ctx)
@@ -132,12 +131,10 @@ type applyRunner struct {
 	kubeconfig string
 	clientset  *kubernetes.Clientset
 	matchRE    *regexp.Regexp
-	// activeTier is the value compared against each test's `tier:` field
-	// ("apiserver" for envtest, "e2e" for real-cluster backends).
+	// activeTier is the tier the backend runs at ("apiserver" for envtest,
+	// "e2e" for real-cluster backends), compared against what each matcher and
+	// each suite's integration features require.
 	activeTier string
-	// integration is true when the backend supports integration-tier features
-	// (dependencies, lifecycle hooks). envtest sets this to false.
-	integration bool
 }
 
 // stopBackend honours --keep-cluster and uses a detached context so teardown
@@ -223,22 +220,29 @@ func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult
 
 	baseDir := filepath.Dir(filePath)
 
-	// Warn-and-skip integration features when the backend doesn't support them.
-	// Tests with `dependencies:` running on envtest get a heads-up but the
-	// runner doesn't fail outright - the test's assertions may still pass if
-	// they don't depend on the deps.
+	// A suite whose dependencies or hooks this tier cannot provide is skipped
+	// whole: its tests' premises cannot be established, so running them anyway
+	// reports on something other than what the author wrote.
+	if skip, reason := integrationFeatureSkip(suite, r.activeTier); skip {
+		slog.Debug("skipping suite (integration features unsupported)",
+			"file", filePath, "backend", r.opts.BackendType, "reason", reason)
+		for _, et := range expanded {
+			if r.matchRE != nil && !r.matchRE.MatchString(et.DisplayName) {
+				continue
+			}
+			sr.Results = append(sr.Results, TestResult{
+				SuiteName:  suite.SuiteName,
+				TestName:   et.DisplayName,
+				Pass:       true,
+				Skipped:    true,
+				SkipReason: reason,
+			})
+		}
+		sr.Duration = time.Since(start)
+		return sr, nil
+	}
+
 	clusterDeps, suiteDeps, testDeps := splitDepsByScope(suite.Dependencies)
-	if !r.integration && (len(clusterDeps)+len(suiteDeps)+len(testDeps) > 0) {
-		slog.Warn("dependencies declared but backend does not support them — skipping",
-			"file", filePath, "backend", r.opts.BackendType,
-			"clusterDeps", len(clusterDeps), "suiteDeps", len(suiteDeps), "testDeps", len(testDeps))
-		clusterDeps, suiteDeps, testDeps = nil, nil, nil
-	}
-	if !r.integration && (len(suite.BeforeAll)+len(suite.AfterAll) > 0) {
-		slog.Warn("lifecycle hooks declared but backend does not support them — skipping",
-			"file", filePath, "backend", r.opts.BackendType)
-		suite.BeforeAll, suite.AfterAll = nil, nil
-	}
 
 	clusterState, _, err := deps.Install(ctx, clusterDeps, r.kubeCfg, deps.InstallOptions{
 		Parallelism: r.opts.Parallelism, BaseDir: baseDir,
@@ -381,20 +385,20 @@ func (r *applyRunner) runTest(ctx context.Context, et expandedTest, suite *dsl.S
 		Test:       et.DisplayName,
 		Namespace:  namespace,
 	}
-	if r.integration {
-		if err := RunHooks(ctx, "setup", test.Setup, hookEnv); err != nil {
-			tr.Failures = append(tr.Failures, fmt.Sprintf("        → setup hook: %v", err))
-			tr.Pass = false
-			return tr
-		}
-		defer func() {
-			teardownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			if err := RunHooks(teardownCtx, "teardown", test.Teardown, hookEnv); err != nil {
-				slog.Warn("teardown hook failed", "test", et.DisplayName, "err", err)
-			}
-		}()
+	// No tier guard here: runFile skips any suite declaring hooks the active
+	// tier cannot run, so reaching a test means they are available.
+	if err := RunHooks(ctx, "setup", test.Setup, hookEnv); err != nil {
+		tr.Failures = append(tr.Failures, fmt.Sprintf("        → setup hook: %v", err))
+		tr.Pass = false
+		return tr
 	}
+	defer func() {
+		teardownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := RunHooks(teardownCtx, "teardown", test.Teardown, hookEnv); err != nil {
+			slog.Warn("teardown hook failed", "test", et.DisplayName, "err", err)
+		}
+	}()
 
 	renderOpts := Options{ChartPath: r.opts.ChartPath, Cfg: r.opts.Cfg}
 	req := buildRenderRequest(test, suite, renderOpts)
@@ -578,13 +582,6 @@ func formatTestProgress(tr TestResult, displayName string, dur time.Duration) st
 		return fmt.Sprintf("%s %s (%s) — %s", status, displayName, durStr, first)
 	}
 	return fmt.Sprintf("%s %s (%s)", status, displayName, durStr)
-}
-
-// backendSupportsDeps reports whether a backend supports integration-tier
-// features (`dependencies:` installation and lifecycle hooks). envtest does
-// not - it has no controllers to reconcile Helm releases or hook jobs.
-func backendSupportsDeps(backendType string) bool {
-	return backendType != "envtest"
 }
 
 // splitDepsByScope partitions deps by scope. The default scope (empty string)
