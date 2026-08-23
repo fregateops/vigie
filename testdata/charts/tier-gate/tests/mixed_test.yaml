@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/fregateops/vigie/refs/heads/main/pkg/api/schema/v1/testfile.json
+#
+# One suite spanning two tiers. At the template tier the render assertion runs
+# and the `applies` assertion is skipped with the flag that would run it; at a
+# cluster tier both run. Guards the tier gate in both runners.
+suite: mixed tiers
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: renders the workload name
+    target:
+      kind: Deployment
+    asserts:
+      - equal:
+          path: metadata.name
+          value: release-name-app
+
+  - it: the Deployment is admitted by the API server
+    target:
+      kind: Deployment
+    asserts:
+      - applies: {}

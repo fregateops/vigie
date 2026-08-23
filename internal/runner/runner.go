@@ -171,6 +171,20 @@ func runFile(filePath string, opts Options, validators []versionedValidator, mat
 			slog.Debug("skipping test (no match)", "test", et.DisplayName)
 			continue
 		}
+		// A test needing a cluster is skipped with the flag that would run it,
+		// mirroring the apply tier. Without this gate its matchers evaluate and
+		// hard-fail, reporting a broken test where the truth is a tier mismatch.
+		if skip, reason := matcherTierSkip(et.Test.Asserts, matchers.TierTemplate); skip {
+			slog.Debug("skipping test (matcher tier requirement)", "test", et.DisplayName, "reason", reason)
+			sr.Results = append(sr.Results, TestResult{
+				SuiteName:  suite.SuiteName,
+				TestName:   et.DisplayName,
+				Pass:       true,
+				Skipped:    true,
+				SkipReason: reason,
+			})
+			continue
+		}
 		sr.Results = append(sr.Results, runTest(et, suite, opts, store, validators))
 	}
 	sr.Duration = time.Since(start)

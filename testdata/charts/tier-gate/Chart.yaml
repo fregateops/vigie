@@ -1,0 +1,5 @@
+apiVersion: v2
+name: tier-gate
+description: Fixture for tier gating - one render-only test and one cluster-only test.
+version: 0.1.0
+appVersion: "1.0.0"

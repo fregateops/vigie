@@ -88,3 +88,34 @@ func TestTest_FailingChart_ReportsFailure(t *testing.T) {
 		t.Errorf("pretty output should name the failing test; got:\n%s", out)
 	}
 }
+
+// TestTest_TierGate_SkipsClusterMatchersAtTemplateTier pins the template-tier
+// gate: a cluster-only matcher must be reported as skipped, with the flag that
+// would run it, instead of hard-failing as though the test were broken.
+func TestTest_TierGate_SkipsClusterMatchersAtTemplateTier(t *testing.T) {
+	results := runTestSuite(t, "../../testdata/charts/tier-gate", t.TempDir())
+	if runner.AnyFailed(results) {
+		t.Fatalf("a cluster matcher at the template tier must skip, not fail; results: %+v", results)
+	}
+
+	var passed, skipped int
+	var skipReason string
+	for _, sr := range results {
+		for _, tr := range sr.Results {
+			if tr.Skipped {
+				skipped++
+				skipReason = tr.SkipReason
+				continue
+			}
+			passed++
+		}
+	}
+	if passed != 1 || skipped != 1 {
+		t.Fatalf("want 1 passed and 1 skipped, got %d passed and %d skipped", passed, skipped)
+	}
+	for _, want := range []string{`"applies"`, "--cluster"} {
+		if !strings.Contains(skipReason, want) {
+			t.Errorf("skip reason %q does not mention %q", skipReason, want)
+		}
+	}
+}
