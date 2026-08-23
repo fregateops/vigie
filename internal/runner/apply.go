@@ -30,7 +30,6 @@ import (
 	"github.com/fregateops/vigie/internal/deps"
 	"github.com/fregateops/vigie/internal/dsl"
 	"github.com/fregateops/vigie/internal/kubeclient"
-	"github.com/fregateops/vigie/internal/matchers"
 	"github.com/fregateops/vigie/internal/render"
 	"github.com/fregateops/vigie/internal/snapshot"
 )
@@ -579,18 +578,6 @@ func formatTestProgress(tr TestResult, displayName string, dur time.Duration) st
 		return fmt.Sprintf("%s %s (%s) — %s", status, displayName, durStr, first)
 	}
 	return fmt.Sprintf("%s %s (%s)", status, displayName, durStr)
-}
-
-// matcherTierSkip decides whether a test must be skipped because one of its
-// matchers does not support the active backend's tier. The returned reason
-// names the offending matcher so users can see *which* assertion caused the
-// skip without re-reading the spec.
-func matcherTierSkip(asserts []dsl.Assertion, activeTier string) (skip bool, reason string) {
-	name, needTier, ok := matchers.FindUnsupportedMatcher(asserts, activeTier)
-	if !ok {
-		return false, ""
-	}
-	return true, fmt.Sprintf("%q matcher requires tier %s; active tier is %s", name, needTier, activeTier)
 }
 
 // backendSupportsDeps reports whether a backend supports integration-tier

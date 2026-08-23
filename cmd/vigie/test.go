@@ -121,8 +121,9 @@ func runTestCmd(cmd *cobra.Command, args []string) error {
 	slog.Debug("discovered test files", "count", len(files), "testsDir", testsDir)
 
 	// Warnings are non-fatal conditions that still shouldn't read as a green
-	// "0 tests" pass in CI (a typo'd path, an empty tests dir, or files with no
-	// tests). They fail the run (exit 5) by default; --pass-on-warning opts out.
+	// pass in CI: a typo'd path, an empty tests dir, files with no tests, or a
+	// run whose every test skipped. They fail the run (exit 5) by default;
+	// --pass-on-warning opts out.
 	var warnings []string
 
 	if len(files) == 0 {
@@ -141,8 +142,15 @@ func runTestCmd(cmd *cobra.Command, args []string) error {
 		if runner.AnyFailed(results) {
 			os.Exit(1)
 		}
-		if countTestCases(results) == 0 {
+		executed, skipped := countTestOutcomes(results)
+		switch {
+		case executed+skipped == 0:
 			warnings = append(warnings, "test files were discovered but contained no tests")
+		case executed == 0:
+			// Every test skipped. Skips pass, so without this the run exits 0
+			// having verified nothing - the failure mode that reads as success.
+			warnings = append(warnings, fmt.Sprintf(
+				"all %d test(s) were skipped: this run verified nothing (see the skip reasons above)", skipped))
 		}
 	}
 
@@ -296,13 +304,20 @@ func emitWarnings(warnings []string) {
 	}
 }
 
-// countTestCases totals the executed test cases across all suites.
-func countTestCases(results []runner.SuiteResult) int {
-	total := 0
+// countTestOutcomes splits the test cases across all suites into those that
+// actually ran and those that were skipped. Skipped tests carry Pass: true, so
+// the two must be counted apart to tell "everything passed" from "nothing ran".
+func countTestOutcomes(results []runner.SuiteResult) (executed, skipped int) {
 	for _, sr := range results {
-		total += len(sr.Results)
+		for _, tr := range sr.Results {
+			if tr.Skipped {
+				skipped++
+				continue
+			}
+			executed++
+		}
 	}
-	return total
+	return executed, skipped
 }
 
 // resolveTestsDir picks the CLI --tests flag when set, else the config value.
