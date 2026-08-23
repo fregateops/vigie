@@ -68,6 +68,73 @@ func TestClusterHintForTier_NeverNamesAnUnreachableBackend(t *testing.T) {
 	}
 }
 
+func TestTierForBackend(t *testing.T) {
+	cases := map[string]string{
+		"":           matchers.TierTemplate,
+		"none":       matchers.TierTemplate,
+		"envtest":    matchers.TierAPIServer,
+		"kind":       matchers.TierE2E,
+		"k3d":        matchers.TierE2E,
+		"kubeconfig": matchers.TierE2E,
+	}
+	for backend, want := range cases {
+		if got := TierForBackend(backend); got != want {
+			t.Errorf("TierForBackend(%q) = %q, want %q", backend, got, want)
+		}
+	}
+}
+
+func TestUnrunnableAt(t *testing.T) {
+	clusterTest := dsl.Test{It: "applies", Asserts: []dsl.Assertion{{Applies: &dsl.AppliesSpec{}}}}
+	renderTest := dsl.Test{It: "renders", Asserts: []dsl.Assertion{{Equal: &dsl.PathValue{Path: "kind"}}}}
+
+	cases := []struct {
+		name           string
+		suite          dsl.Suite
+		tier           string
+		wantUnrunnable bool
+	}{
+		{
+			name:           "every test needs a cluster",
+			suite:          dsl.Suite{Tests: []dsl.Test{clusterTest, clusterTest}},
+			tier:           matchers.TierTemplate,
+			wantUnrunnable: true,
+		},
+		{
+			// One runnable test is enough: the file has something to say here,
+			// so refusing it would be wrong.
+			name:           "one test can still run",
+			suite:          dsl.Suite{Tests: []dsl.Test{clusterTest, renderTest}},
+			tier:           matchers.TierTemplate,
+			wantUnrunnable: false,
+		},
+		{
+			name:           "the tier satisfies every test",
+			suite:          dsl.Suite{Tests: []dsl.Test{clusterTest, renderTest}},
+			tier:           matchers.TierE2E,
+			wantUnrunnable: false,
+		},
+		{
+			// An empty suite is a different problem, reported as its own warning.
+			name:           "no tests at all",
+			suite:          dsl.Suite{},
+			tier:           matchers.TierTemplate,
+			wantUnrunnable: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			unrunnable, reason := UnrunnableAt(&tc.suite, tc.tier)
+			if unrunnable != tc.wantUnrunnable {
+				t.Fatalf("UnrunnableAt = %v, want %v (reason %q)", unrunnable, tc.wantUnrunnable, reason)
+			}
+			if unrunnable && reason == "" {
+				t.Error("an unrunnable suite must explain why")
+			}
+		})
+	}
+}
+
 func TestMatcherTierSkip_ReportsTheOffendingMatcherInsideAComposite(t *testing.T) {
 	// A composite's tier is the intersection of its children, so a cluster-only
 	// matcher nested in allOf must still be named - blaming "allOf" would leave

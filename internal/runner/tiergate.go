@@ -20,6 +20,37 @@ func matcherTierSkip(asserts []dsl.Assertion, activeTier string) (skip bool, rea
 		name, activeTier, clusterHintForTier(needTier))
 }
 
+// TierForBackend returns the tier a `--cluster` value runs at. An empty value
+// or "none" is the in-process template tier; every other backend maps through
+// backendTier.
+func TierForBackend(backendType string) string {
+	if backendType == "" || backendType == "none" {
+		return matchers.TierTemplate
+	}
+	return backendTier(backendType)
+}
+
+// UnrunnableAt reports whether every test in a parsed suite would be skipped at
+// the given tier, and why. It answers "this file cannot run here at all",
+// which callers use to refuse an explicitly requested file instead of running
+// it to a green zero-assertion finish. A suite with no tests is not unrunnable
+// — that is a different warning.
+func UnrunnableAt(suite *dsl.Suite, tier string) (unrunnable bool, reason string) {
+	if len(suite.Tests) == 0 {
+		return false, ""
+	}
+	for _, test := range suite.Tests {
+		skip, why := matcherTierSkip(test.Asserts, tier)
+		if !skip {
+			return false, ""
+		}
+		if reason == "" {
+			reason = why
+		}
+	}
+	return true, reason
+}
+
 // clusterHintForTier names the `--cluster` values that satisfy needTier,
 // listing only backends the factory can actually build.
 //

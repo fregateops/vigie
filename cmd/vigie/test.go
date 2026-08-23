@@ -14,6 +14,7 @@ import (
 	"github.com/fregateops/vigie/internal/cluster"
 	"github.com/fregateops/vigie/internal/config"
 	"github.com/fregateops/vigie/internal/doctor"
+	"github.com/fregateops/vigie/internal/dsl"
 	"github.com/fregateops/vigie/internal/runner"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -120,6 +121,8 @@ func runTestCmd(cmd *cobra.Command, args []string) error {
 	}
 	slog.Debug("discovered test files", "count", len(files), "testsDir", testsDir)
 
+	refuseUnrunnableFile()
+
 	// Warnings are non-fatal conditions that still shouldn't read as a green
 	// pass in CI: a typo'd path, an empty tests dir, files with no tests, or a
 	// run whose every test skipped. They fail the run (exit 5) by default;
@@ -156,6 +159,29 @@ func runTestCmd(cmd *cobra.Command, args []string) error {
 
 	emitWarnings(warnings)
 	return nil
+}
+
+// refuseUnrunnableFile fails the run when --file names a suite that cannot run
+// a single test at the active tier.
+//
+// Silence is honest for a directory sweep - skipping the files that don't fit
+// is the point - but not for a file the user named explicitly: running it to a
+// green zero-assertion finish answers a question nobody asked. Refusing here
+// also happens before any cluster is provisioned.
+func refuseUnrunnableFile() {
+	if flagTestFile == "" {
+		return
+	}
+	suite, err := dsl.ParseFile(flagTestFile)
+	if err != nil {
+		// Leave malformed files to the runner, which reports parse errors with
+		// the full schema detail.
+		return
+	}
+	tier := runner.TierForBackend(flagTestCluster)
+	if unrunnable, reason := runner.UnrunnableAt(suite, tier); unrunnable {
+		exitErr(3, "%s cannot run at tier %s: %s", flagTestFile, tier, reason)
+	}
 }
 
 // discoverTests resolves the test-file list for the active tier. A single
