@@ -1017,20 +1017,6 @@
           "type": "string",
           "description": "Human-readable description of the scenario."
         },
-        "tier": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array",
-          "description": "Tiers this test applies to. Default: [template, validate]."
-        },
-        "tags": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array",
-          "description": "Arbitrary labels for filtering tests."
-        },
         "skip": {
           "description": "Skip condition — boolean or CEL expression string."
         },
