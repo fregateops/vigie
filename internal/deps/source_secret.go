@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -148,10 +147,7 @@ func resolveOneSource(ctx context.Context, key dsl.SecretKeySpec, baseDir string
 		return []byte(val), "env:" + key.Env, nil
 
 	case key.File != "":
-		path := key.File
-		if !filepath.IsAbs(path) && baseDir != "" {
-			path = filepath.Join(baseDir, path)
-		}
+		path := resolveDepPath(key.File, baseDir)
 		raw, err := os.ReadFile(path)
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, "", nil

@@ -27,19 +27,20 @@ const (
 
 // applyManifest reads a multi-document YAML file and applies each document
 // via the dynamic client.
-func applyManifest(ctx context.Context, dep dsl.Dependency, restCfg *rest.Config) error {
-	slog.Debug("applying manifest dep", "name", dep.Name, "path", dep.Source.Manifest)
-	raw, err := os.ReadFile(dep.Source.Manifest)
+func applyManifest(ctx context.Context, dep dsl.Dependency, restCfg *rest.Config, baseDir string) error {
+	path := resolveDepPath(dep.Source.Manifest, baseDir)
+	slog.Debug("applying manifest dep", "name", dep.Name, "path", path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("dep %q: reading manifest %q: %w", dep.Name, dep.Source.Manifest, err)
+		return fmt.Errorf("dep %q: reading manifest %q: %w", dep.Name, path, err)
 	}
 	return applyRawDocs(ctx, dep.Name, raw, restCfg)
 }
 
 // teardownManifest deletes all resources previously applied by applyManifest.
-func teardownManifest(ctx context.Context, dep dsl.Dependency, restCfg *rest.Config) error {
+func teardownManifest(ctx context.Context, dep dsl.Dependency, restCfg *rest.Config, baseDir string) error {
 	slog.Debug("tearing down manifest dep", "name", dep.Name)
-	raw, err := os.ReadFile(dep.Source.Manifest)
+	raw, err := os.ReadFile(resolveDepPath(dep.Source.Manifest, baseDir))
 	if err != nil {
 		slog.Debug("manifest dep: source file missing during teardown, skipping", "dep", dep.Name)
 		return nil

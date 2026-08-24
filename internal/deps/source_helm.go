@@ -21,7 +21,7 @@ import (
 // helm.sh/helm/v3 action API. It respects the dep's namespace and values overrides.
 // On scope=cluster, the caller is expected to have already checked the cache before
 // calling installHelm.
-func installHelm(ctx context.Context, dep dsl.Dependency, restCfg *rest.Config) error {
+func installHelm(ctx context.Context, dep dsl.Dependency, restCfg *rest.Config, baseDir string) error {
 	slog.Debug("installing helm dep", "name", dep.Name, "chart", dep.Source.Helm.Chart,
 		"repo", dep.Source.Helm.Repo, "version", dep.Source.Helm.Version,
 		"namespace", dep.Namespace)
@@ -31,7 +31,7 @@ func installHelm(ctx context.Context, dep dsl.Dependency, restCfg *rest.Config) 
 		namespace = dep.Name
 	}
 
-	chrt, err := locateAndLoadChart(dep.Source.Helm)
+	chrt, err := locateAndLoadChart(dep.Source.Helm, baseDir)
 	if err != nil {
 		return fmt.Errorf("dep %q: locating helm chart: %w", dep.Name, err)
 	}
@@ -95,10 +95,11 @@ func teardownHelm(ctx context.Context, dep dsl.Dependency, restCfg *rest.Config)
 
 // locateAndLoadChart resolves the chart from the given HelmSource, downloading
 // from a remote repository or loading from a local path.
-func locateAndLoadChart(src *dsl.HelmSource) (*helmchart.Chart, error) {
-	// If no repo URL is specified, treat Chart as a local path.
+func locateAndLoadChart(src *dsl.HelmSource, baseDir string) (*helmchart.Chart, error) {
+	// If no repo URL is specified, treat Chart as a local path, relative to the
+	// test file that declared it rather than to the working directory.
 	if src.Repo == "" {
-		return loader.Load(src.Chart)
+		return loader.Load(resolveDepPath(src.Chart, baseDir))
 	}
 
 	cacheDir, err := os.MkdirTemp("", "vigie-chart-*")

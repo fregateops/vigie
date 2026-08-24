@@ -14,9 +14,10 @@ import (
 
 // applyKustomize builds a kustomization in-process using the krusty API,
 // then applies the resulting documents via the dynamic client.
-func applyKustomize(ctx context.Context, dep dsl.Dependency, restCfg *rest.Config) error {
-	slog.Debug("applying kustomize dep", "name", dep.Name, "path", dep.Source.Kustomize)
-	raw, err := buildKustomization(dep.Source.Kustomize)
+func applyKustomize(ctx context.Context, dep dsl.Dependency, restCfg *rest.Config, baseDir string) error {
+	path := resolveDepPath(dep.Source.Kustomize, baseDir)
+	slog.Debug("applying kustomize dep", "name", dep.Name, "path", path)
+	raw, err := buildKustomization(path)
 	if err != nil {
 		return fmt.Errorf("dep %q: building kustomization: %w", dep.Name, err)
 	}
@@ -25,9 +26,9 @@ func applyKustomize(ctx context.Context, dep dsl.Dependency, restCfg *rest.Confi
 
 // teardownKustomize removes resources that were applied by applyKustomize by
 // rebuilding the manifest from kustomize and deleting each resulting resource.
-func teardownKustomize(ctx context.Context, dep dsl.Dependency, restCfg *rest.Config) error {
+func teardownKustomize(ctx context.Context, dep dsl.Dependency, restCfg *rest.Config, baseDir string) error {
 	slog.Debug("tearing down kustomize dep", "name", dep.Name)
-	raw, err := buildKustomization(dep.Source.Kustomize)
+	raw, err := buildKustomization(resolveDepPath(dep.Source.Kustomize, baseDir))
 	if err != nil {
 		slog.Debug("kustomize dep: rebuild failed during teardown, skipping", "dep", dep.Name, "err", err)
 		return nil

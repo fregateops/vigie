@@ -113,7 +113,7 @@ func Teardown(ctx context.Context, state *InstallState) error {
 	reversed := reverseDeps(state.Installed)
 	var teardownErrs []error
 	for _, dep := range reversed {
-		if err := teardownOne(ctx, dep, state.restCfg); err != nil {
+		if err := teardownOne(ctx, dep, state.restCfg, state.baseDir); err != nil {
 			slog.Warn("dep teardown failed", "dep", dep.Name, "err", err)
 			teardownErrs = append(teardownErrs, err)
 		}
@@ -185,11 +185,11 @@ func installSource(ctx context.Context, dep dsl.Dependency, restCfg *rest.Config
 	src := dep.Source
 	switch {
 	case src.Helm != nil:
-		return installHelm(ctx, dep, restCfg)
+		return installHelm(ctx, dep, restCfg, baseDir)
 	case src.Manifest != "":
-		return applyManifest(ctx, dep, restCfg)
+		return applyManifest(ctx, dep, restCfg, baseDir)
 	case src.Kustomize != "":
-		return applyKustomize(ctx, dep, restCfg)
+		return applyKustomize(ctx, dep, restCfg, baseDir)
 	case src.Ref != "":
 		// Refs are resolved before batching; reaching here is a programmer error.
 		return fmt.Errorf("unresolved ref source %q: call ResolveRefs before Install", src.Ref)
@@ -200,16 +200,19 @@ func installSource(ctx context.Context, dep dsl.Dependency, restCfg *rest.Config
 	}
 }
 
-// teardownOne dispatches to the appropriate source teardown function.
-func teardownOne(ctx context.Context, dep dsl.Dependency, restCfg *rest.Config) error {
+// teardownOne dispatches to the appropriate source teardown function. baseDir
+// must match the one used at install time: manifest and kustomize teardowns
+// re-read the source to know what to delete, so a different base resolves to a
+// different file and leaves resources behind.
+func teardownOne(ctx context.Context, dep dsl.Dependency, restCfg *rest.Config, baseDir string) error {
 	src := dep.Source
 	switch {
 	case src.Helm != nil:
 		return teardownHelm(ctx, dep, restCfg)
 	case src.Manifest != "":
-		return teardownManifest(ctx, dep, restCfg)
+		return teardownManifest(ctx, dep, restCfg, baseDir)
 	case src.Kustomize != "":
-		return teardownKustomize(ctx, dep, restCfg)
+		return teardownKustomize(ctx, dep, restCfg, baseDir)
 	case src.Secret != nil:
 		return teardownSecret(ctx, dep, restCfg)
 	default:
