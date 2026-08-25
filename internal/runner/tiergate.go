@@ -30,15 +30,10 @@ func TierForBackend(backendType string) string {
 	return backendTier(backendType)
 }
 
-// integrationFeatureSkip reports whether a suite declares integration-tier
-// features - dependencies, or lifecycle hooks at suite or test scope - that the
-// active tier cannot provide, and why.
-//
-// These used to be dropped with a log warning while the tests ran on, on the
-// theory that assertions might still pass without them. They can, and that is
-// exactly the problem: a suite whose staged dependencies were never installed
-// reports green having verified a premise that never held. The suite's tests
-// are skipped instead, so the gap is visible and counted.
+// integrationFeatureSkip reports whether a suite declares dependencies or
+// lifecycle hooks the active tier cannot provide. Its tests are then skipped
+// rather than run: a suite whose staged dependencies never existed would
+// otherwise report green having verified a premise that never held.
 func integrationFeatureSkip(suite *dsl.Suite, tier string) (skip bool, reason string) {
 	if tierAtLeast(tier, matchers.TierSimulated) {
 		return false, ""
@@ -72,7 +67,7 @@ func tierAtLeast(active, want string) bool {
 }
 
 func tierRank(tier string) int {
-	for i, t := range matchers.AllTiers {
+	for i, t := range dsl.AllTiers() {
 		if t == tier {
 			return i
 		}
@@ -107,13 +102,10 @@ func UnrunnableAt(suite *dsl.Suite, tier string) (unrunnable bool, reason string
 // clusterHintForTier names the `--cluster` values that satisfy needTier,
 // listing only backends the factory can actually build.
 //
-// It deliberately does not echo needTier back at the user. Every matcher's
-// tier list is a suffix of template < apiserver < simulated < e2e, so needTier
-// is the *lowest* tier that would work - and for the waitFor/lookup family
-// that is "simulated", a backend which arrives in a later release and which
-// `--cluster simulated` currently rejects. Naming a flag value that errors out
-// is worse than saying nothing, so the hint points at the backends that both
-// exist and provide what the matcher needs.
+// It deliberately does not echo needTier back: that is the *lowest* usable
+// tier, which for the waitFor/lookup family is "simulated" - a backend
+// `--cluster simulated` still rejects. Naming a flag that errors out is worse
+// than saying nothing.
 func clusterHintForTier(needTier string) string {
 	if needTier == matchers.TierAPIServer {
 		return "--cluster envtest (or kind|k3d|kubeconfig)"

@@ -11,7 +11,6 @@ func init() {
 	Register(simpleMatcher{
 		name:     "expr",
 		matches:  func(a dsl.Assertion) bool { return a.Expr != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalExpr(a.Expr, ctx) },
 	})
 }

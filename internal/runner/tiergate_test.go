@@ -57,7 +57,7 @@ func TestMatcherTierSkip_NamesTheMatcherAndAReachableFlag(t *testing.T) {
 // family the lowest usable tier IS simulated, so the hint has to name the e2e
 // backends that exist and also satisfy those matchers.
 func TestClusterHintForTier_NeverNamesAnUnreachableBackend(t *testing.T) {
-	for _, tier := range matchers.AllTiers {
+	for _, tier := range dsl.AllTiers() {
 		hint := clusterHintForTier(tier)
 		if strings.Contains(hint, matchers.TierSimulated) {
 			t.Errorf("hint for tier %q offers the unimplemented simulated backend: %q", tier, hint)

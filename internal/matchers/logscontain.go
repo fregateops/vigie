@@ -18,7 +18,6 @@ func init() {
 	Register(simpleMatcher{
 		name:     "logsContain",
 		matches:  func(a dsl.Assertion) bool { return a.LogsContain != nil },
-		tiers:    Tiers(TierE2E),
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalLogsContain(a.LogsContain, ctx) },
 	})
 }

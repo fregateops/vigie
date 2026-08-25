@@ -30,7 +30,6 @@ func init() {
 	Register(simpleMatcher{
 		name:     "http",
 		matches:  func(a dsl.Assertion) bool { return a.HTTP != nil },
-		tiers:    Tiers(TierE2E),
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalHTTP(a.HTTP, ctx) },
 	})
 }

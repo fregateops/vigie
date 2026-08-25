@@ -13,7 +13,6 @@ func init() {
 	Register(simpleMatcher{
 		name:     "matchSchema",
 		matches:  func(a dsl.Assertion) bool { return a.MatchSchema != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalMatchSchema(a.MatchSchema, ctx) },
 	})
 }

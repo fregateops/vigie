@@ -166,133 +166,127 @@ type TargetSpec struct {
 // Assertion is a single assertion within a test. Exactly one matcher key is expected (optionally with not/on).
 type Assertion struct {
 	// Negate this assertion — a passing matcher fails and vice versa.
-	Not bool `yaml:"not" json:"not,omitempty"`
+	Not bool `yaml:"not" json:"not,omitempty" vigie:"-"`
 
 	// Per-assertion document selector; overrides the test-level target: for this assertion only.
-	On *TargetSpec `yaml:"on" json:"on,omitempty"`
+	On *TargetSpec `yaml:"on" json:"on,omitempty" vigie:"-"`
 
 	// Asserts the value at path deep-equals value (int/float normalized for YAML). All tiers.
-	Equal *PathValue `yaml:"equal" json:"equal,omitempty"`
+	Equal *PathValue `yaml:"equal" json:"equal,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the value at path is not deep-equal to value. A missing path passes. All tiers.
-	NotEqual *PathValue `yaml:"notEqual" json:"notEqual,omitempty"`
+	NotEqual *PathValue `yaml:"notEqual" json:"notEqual,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the numeric value at path is strictly greater than value. All tiers.
-	GreaterThan *PathValue `yaml:"greaterThan" json:"greaterThan,omitempty"`
+	GreaterThan *PathValue `yaml:"greaterThan" json:"greaterThan,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the numeric value at path is strictly less than value. All tiers.
-	LessThan *PathValue `yaml:"lessThan" json:"lessThan,omitempty"`
+	LessThan *PathValue `yaml:"lessThan" json:"lessThan,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the numeric value at path is greater than or equal to value. All tiers.
-	GTE *PathValue `yaml:"gte" json:"gte,omitempty"`
+	GTE *PathValue `yaml:"gte" json:"gte,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the numeric value at path is less than or equal to value. All tiers.
-	LTE *PathValue `yaml:"lte" json:"lte,omitempty"`
+	LTE *PathValue `yaml:"lte" json:"lte,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the string at path contains the substring content, or the list at path contains the item. All tiers.
-	Contains *PathContent `yaml:"contains" json:"contains,omitempty"`
+	Contains *PathContent `yaml:"contains" json:"contains,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the string/list at path does not contain content. All tiers.
-	NotContains *PathContent `yaml:"notContains" json:"notContains,omitempty"`
+	NotContains *PathContent `yaml:"notContains" json:"notContains,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the string at path starts with value. All tiers.
-	StartsWith *PathValue `yaml:"startsWith" json:"startsWith,omitempty"`
+	StartsWith *PathValue `yaml:"startsWith" json:"startsWith,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the string at path ends with value. All tiers.
-	EndsWith *PathValue `yaml:"endsWith" json:"endsWith,omitempty"`
+	EndsWith *PathValue `yaml:"endsWith" json:"endsWith,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the string at path matches the RE2 regular expression pattern. All tiers.
-	MatchRegex *PathPattern `yaml:"matchRegex" json:"matchRegex,omitempty"`
+	MatchRegex *PathPattern `yaml:"matchRegex" json:"matchRegex,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the string at path does not match the RE2 regular expression pattern. All tiers.
-	NotMatchRegex *PathPattern `yaml:"notMatchRegex" json:"notMatchRegex,omitempty"`
+	NotMatchRegex *PathPattern `yaml:"notMatchRegex" json:"notMatchRegex,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the string at path matches a template pattern where ${VAR} placeholders match any text. All tiers.
-	MatchTemplate *PathPattern `yaml:"matchTemplate" json:"matchTemplate,omitempty"`
+	MatchTemplate *PathPattern `yaml:"matchTemplate" json:"matchTemplate,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts path is present (any value, including null). All tiers.
-	Exists *PathOnly `yaml:"exists" json:"exists,omitempty"`
+	Exists *PathOnly `yaml:"exists" json:"exists,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts path is absent. All tiers.
-	NotExists *PathOnly `yaml:"notExists" json:"notExists,omitempty"`
+	NotExists *PathOnly `yaml:"notExists" json:"notExists,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the value at path is null. All tiers.
-	IsNull *PathOnly `yaml:"isNull" json:"isNull,omitempty"`
+	IsNull *PathOnly `yaml:"isNull" json:"isNull,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the value at path is not null. All tiers.
-	IsNotNull *PathOnly `yaml:"isNotNull" json:"isNotNull,omitempty"`
+	IsNotNull *PathOnly `yaml:"isNotNull" json:"isNotNull,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the value at path is empty (empty string, list, map, or null). All tiers.
-	IsEmpty *PathOnly `yaml:"isEmpty" json:"isEmpty,omitempty"`
+	IsEmpty *PathOnly `yaml:"isEmpty" json:"isEmpty,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the value at path is not empty. All tiers.
-	IsNotEmpty *PathOnly `yaml:"isNotEmpty" json:"isNotEmpty,omitempty"`
+	IsNotEmpty *PathOnly `yaml:"isNotEmpty" json:"isNotEmpty,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the selected document's kind field equals this value. All tiers.
-	IsKind *string `yaml:"isKind" json:"isKind,omitempty"`
+	IsKind *string `yaml:"isKind" json:"isKind,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the selected document's apiVersion field equals this value. All tiers.
-	IsAPIVersion *string `yaml:"isAPIVersion" json:"isAPIVersion,omitempty"`
+	IsAPIVersion *string `yaml:"isAPIVersion" json:"isAPIVersion,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the render produced exactly this many YAML documents. All tiers.
-	HasDocuments *int `yaml:"hasDocuments" json:"hasDocuments,omitempty"`
+	HasDocuments *int `yaml:"hasDocuments" json:"hasDocuments,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the render itself failed; optionally that the error matches errorPattern. All tiers.
-	FailedTemplate *FailedTemplateSpec `yaml:"failedTemplate" json:"failedTemplate,omitempty"`
+	FailedTemplate *FailedTemplateSpec `yaml:"failedTemplate" json:"failedTemplate,omitempty" vigie:"needs=renderedManifests"`
 
 	// Passes when every child assertion passes. Supported tiers are the intersection of the children's tiers.
-	AllOf []Assertion `yaml:"allOf" json:"allOf,omitempty"`
+	AllOf []Assertion `yaml:"allOf" json:"allOf,omitempty" vigie:"-"`
 
 	// Passes when at least one child assertion passes. Supported tiers are the intersection of the children's tiers.
-	AnyOf []Assertion `yaml:"anyOf" json:"anyOf,omitempty"`
+	AnyOf []Assertion `yaml:"anyOf" json:"anyOf,omitempty" vigie:"-"`
 
 	// Asserts the value at path is of type of. All tiers.
-	IsType *IsTypeSpec `yaml:"isType" json:"isType,omitempty"`
+	IsType *IsTypeSpec `yaml:"isType" json:"isType,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the collection at path has exactly value elements. All tiers.
-	LengthEqual *LengthEqualSpec `yaml:"lengthEqual" json:"lengthEqual,omitempty"`
+	LengthEqual *LengthEqualSpec `yaml:"lengthEqual" json:"lengthEqual,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the map at path contains every key/value pair in content (deep-equal per key). All tiers.
-	IsSubset *PathContent `yaml:"isSubset" json:"isSubset,omitempty"`
+	IsSubset *PathContent `yaml:"isSubset" json:"isSubset,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the document matches the stored snapshot; writes on first run or with --update-snapshots. All tiers.
-	MatchSnapshot *MatchSnapshotSpec `yaml:"matchSnapshot" json:"matchSnapshot,omitempty"`
+	MatchSnapshot *MatchSnapshotSpec `yaml:"matchSnapshot" json:"matchSnapshot,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the value at path validates against an inline JSON Schema (draft 2020-12) fragment. All tiers.
-	MatchSchema *MatchSchemaSpec `yaml:"matchSchema" json:"matchSchema,omitempty"`
+	MatchSchema *MatchSchemaSpec `yaml:"matchSchema" json:"matchSchema,omitempty" vigie:"needs=renderedManifests"`
 
 	// CEL expression that must evaluate to true. Bindings: resources, doc, release, values, matrix, case, output (helper tests). All tiers.
-	Expr *string `yaml:"expr" json:"expr,omitempty"`
+	Expr *string `yaml:"expr" json:"expr,omitempty" vigie:"needs=renderedManifests"`
 
 	// Asserts the resource is accepted by the API server (admission, schema, RBAC, immutability). Apply tiers only (test-apply api/simulated/e2e).
-	Applies *AppliesSpec `yaml:"applies" json:"applies,omitempty"`
+	Applies *AppliesSpec `yaml:"applies" json:"applies,omitempty" vigie:"needs=apiServerAdmission"`
 
 	// Asserts the resource is rejected by the API server, optionally matching reason/message. Apply tiers only (test-apply api/simulated/e2e).
-	Rejected *RejectedSpec `yaml:"rejected" json:"rejected,omitempty"`
+	Rejected *RejectedSpec `yaml:"rejected" json:"rejected,omitempty" vigie:"needs=apiServerAdmission"`
 
 	// Polls until the resource reports the given status condition. Apply tiers simulated and e2e only.
-	WaitFor *WaitForSpec `yaml:"waitFor" json:"waitFor,omitempty"`
+	WaitFor *WaitForSpec `yaml:"waitFor" json:"waitFor,omitempty" vigie:"needs=liveReads,reconciliation"`
 
 	// Polls until the resource is Ready (readiness inferred per kind). Apply tiers simulated and e2e only.
-	BecomesReady *WaitForSpec `yaml:"becomesReady" json:"becomesReady,omitempty"`
+	BecomesReady *WaitForSpec `yaml:"becomesReady" json:"becomesReady,omitempty" vigie:"needs=liveReads,reconciliation"`
 
 	// Sends an HTTP request to a target in the cluster and asserts on the response. e2e tier only.
-	HTTP *HTTPAssert `yaml:"http" json:"http,omitempty"`
+	HTTP *HTTPAssert `yaml:"http" json:"http,omitempty" vigie:"needs=runningPods,networkEgress"`
 
 	// Fetches a live resource and runs nested assertions on it. Apply tiers simulated and e2e only.
-	Lookup *LookupAssert `yaml:"lookup" json:"lookup,omitempty"`
+	Lookup *LookupAssert `yaml:"lookup" json:"lookup,omitempty" vigie:"needs=liveReads,reconciliation"`
 
 	// Asserts a pod's logs contain a substring or /regex/ within a timeout. e2e tier only.
-	LogsContain *LogsAssert `yaml:"logsContain" json:"logsContain,omitempty"`
+	LogsContain *LogsAssert `yaml:"logsContain" json:"logsContain,omitempty" vigie:"needs=runningPods,podLogs"`
 
 	// Asserts a Kubernetes Event with the given reason/type was emitted for the involved object. Apply tiers simulated and e2e only.
-	EventEmitted *EventAssert `yaml:"eventEmitted" json:"eventEmitted,omitempty"`
-
-	// Planned (not yet implemented): asserts a specific template produced no output. See DESIGN.md §8.
-	NotRendered *NotRenderedSpec `yaml:"notRendered,omitempty" json:"notRendered,omitempty"`
-
-	// Planned (not yet implemented): asserts a Prometheus-format metric on a target endpoint matches an expected value. See DESIGN.md §8.
-	MetricEquals *MetricEqualsSpec `yaml:"metricEquals,omitempty" json:"metricEquals,omitempty"`
+	EventEmitted *EventAssert `yaml:"eventEmitted" json:"eventEmitted,omitempty" vigie:"needs=liveReads,reconciliation"`
 }
 
 // PathValue is a dotted/bracketed path plus an expected value.
@@ -383,15 +377,6 @@ type RejectedSpec struct {
 	// Regex matched against the error message.
 	Message string `yaml:"message" json:"message,omitempty"`
 }
-
-// NotRenderedSpec is the spec for the notRendered planned matcher.
-type NotRenderedSpec struct {
-	// Template path that should produce no output.
-	Template string `yaml:"template" json:"template,omitempty"`
-}
-
-// MetricEqualsSpec is the spec for the metricEquals planned matcher.
-type MetricEqualsSpec struct{}
 
 // Integration-tier types follow. These are used by test-apply simulated/e2e tiers.
 

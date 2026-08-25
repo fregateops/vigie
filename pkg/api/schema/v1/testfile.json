@@ -181,14 +181,6 @@
         "eventEmitted": {
           "$ref": "#/$defs/EventAssert",
           "description": "Asserts a Kubernetes Event with the given reason/type was emitted for the involved object. Apply tiers simulated and e2e only."
-        },
-        "notRendered": {
-          "$ref": "#/$defs/NotRenderedSpec",
-          "description": "Planned (not yet implemented): asserts a specific template produced no output. See DESIGN.md §8."
-        },
-        "metricEquals": {
-          "$ref": "#/$defs/MetricEqualsSpec",
-          "description": "Planned (not yet implemented): asserts a Prometheus-format metric on a target endpoint matches an expected value. See DESIGN.md §8."
         }
       },
       "additionalProperties": false,
@@ -780,23 +772,6 @@
       "additionalProperties": false,
       "type": "object",
       "description": "MatchSnapshotSpec is used by the matchSnapshot matcher."
-    },
-    "MetricEqualsSpec": {
-      "properties": {},
-      "additionalProperties": false,
-      "type": "object",
-      "description": "MetricEqualsSpec is the spec for the metricEquals planned matcher."
-    },
-    "NotRenderedSpec": {
-      "properties": {
-        "template": {
-          "type": "string",
-          "description": "Template path that should produce no output."
-        }
-      },
-      "additionalProperties": false,
-      "type": "object",
-      "description": "NotRenderedSpec is the spec for the notRendered planned matcher."
     },
     "PathContent": {
       "properties": {

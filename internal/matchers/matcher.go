@@ -24,12 +24,12 @@ type Matcher interface {
 	// the first-case-wins semantic of the legacy switch.
 	Matches(a dsl.Assertion) bool
 
-	// SupportedTiers returns the list of tier labels under which this
-	// matcher can produce a meaningful result. Most matchers ignore the
-	// assertion argument and return a static list (AllTiers for template-
-	// tier matchers, or Tiers(...) for cluster-tier matchers). Composite
-	// matchers (allOf, anyOf) recurse into children to intersect their
-	// supported sets — that's why the method takes the assertion at all.
+	// SupportedTiers returns the tier labels under which this matcher can
+	// produce a meaningful result. Most matchers ignore the assertion argument
+	// and derive their tiers from the capabilities their field declares on
+	// dsl.Assertion. Composite matchers (allOf, anyOf) recurse into children to
+	// intersect their supported sets — that's why the method takes the
+	// assertion at all.
 	SupportedTiers(a dsl.Assertion) []string
 
 	// Evaluate runs the matcher against the assertion and eval context and
@@ -44,13 +44,18 @@ type Matcher interface {
 type simpleMatcher struct {
 	name     string
 	matches  func(dsl.Assertion) bool
-	tiers    []string
 	evaluate func(dsl.Assertion, EvalContext) Result
 }
 
-func (m simpleMatcher) Name() string                            { return m.name }
-func (m simpleMatcher) Matches(a dsl.Assertion) bool            { return m.matches(a) }
-func (m simpleMatcher) SupportedTiers(_ dsl.Assertion) []string { return m.tiers }
+func (m simpleMatcher) Name() string                 { return m.name }
+func (m simpleMatcher) Matches(a dsl.Assertion) bool { return m.matches(a) }
+
+// SupportedTiers derives the tiers from the capabilities the matcher's field
+// declares on dsl.Assertion, so the tier data lives in exactly one place -
+// next to the field it describes - rather than being restated here.
+func (m simpleMatcher) SupportedTiers(_ dsl.Assertion) []string {
+	return dsl.TiersForMatcher(m.name)
+}
 func (m simpleMatcher) Evaluate(a dsl.Assertion, ctx EvalContext) Result {
 	return m.evaluate(a, ctx)
 }

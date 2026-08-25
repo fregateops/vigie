@@ -11,7 +11,6 @@ func init() {
 	Register(simpleMatcher{
 		name:     "matchSnapshot",
 		matches:  func(a dsl.Assertion) bool { return a.MatchSnapshot != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalMatchSnapshot(a.MatchSnapshot, ctx) },
 	})
 }

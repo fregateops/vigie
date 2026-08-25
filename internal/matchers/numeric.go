@@ -10,25 +10,21 @@ func init() {
 	Register(simpleMatcher{
 		name:     "greaterThan",
 		matches:  func(a dsl.Assertion) bool { return a.GreaterThan != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalGreaterThan(a.GreaterThan, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "lessThan",
 		matches:  func(a dsl.Assertion) bool { return a.LessThan != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalLessThan(a.LessThan, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "gte",
 		matches:  func(a dsl.Assertion) bool { return a.GTE != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalGTE(a.GTE, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "lte",
 		matches:  func(a dsl.Assertion) bool { return a.LTE != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalLTE(a.LTE, ctx) },
 	})
 }
