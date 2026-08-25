@@ -12,43 +12,36 @@ func init() {
 	Register(simpleMatcher{
 		name:     "isNull",
 		matches:  func(a dsl.Assertion) bool { return a.IsNull != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalIsNull(a.IsNull, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "isNotNull",
 		matches:  func(a dsl.Assertion) bool { return a.IsNotNull != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalIsNotNull(a.IsNotNull, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "isEmpty",
 		matches:  func(a dsl.Assertion) bool { return a.IsEmpty != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalIsEmpty(a.IsEmpty, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "isNotEmpty",
 		matches:  func(a dsl.Assertion) bool { return a.IsNotEmpty != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalIsNotEmpty(a.IsNotEmpty, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "isType",
 		matches:  func(a dsl.Assertion) bool { return a.IsType != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalIsType(a.IsType, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "lengthEqual",
 		matches:  func(a dsl.Assertion) bool { return a.LengthEqual != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalLengthEqual(a.LengthEqual, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "isSubset",
 		matches:  func(a dsl.Assertion) bool { return a.IsSubset != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalIsSubset(a.IsSubset, ctx) },
 	})
 }

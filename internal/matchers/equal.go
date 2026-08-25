@@ -10,13 +10,11 @@ func init() {
 	Register(simpleMatcher{
 		name:     "equal",
 		matches:  func(a dsl.Assertion) bool { return a.Equal != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalEqual(a.Equal, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "notEqual",
 		matches:  func(a dsl.Assertion) bool { return a.NotEqual != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalNotEqual(a.NotEqual, ctx) },
 	})
 }

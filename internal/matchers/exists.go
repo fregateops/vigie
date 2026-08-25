@@ -10,13 +10,11 @@ func init() {
 	Register(simpleMatcher{
 		name:     "exists",
 		matches:  func(a dsl.Assertion) bool { return a.Exists != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalExists(a.Exists, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "notExists",
 		matches:  func(a dsl.Assertion) bool { return a.NotExists != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalNotExists(a.NotExists, ctx) },
 	})
 }

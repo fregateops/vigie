@@ -16,7 +16,6 @@ func init() {
 	Register(simpleMatcher{
 		name:     "lookup",
 		matches:  func(a dsl.Assertion) bool { return a.Lookup != nil },
-		tiers:    Tiers(TierSimulated, TierE2E),
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalLookup(a.Lookup, ctx) },
 	})
 }

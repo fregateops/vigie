@@ -11,25 +11,21 @@ func init() {
 	Register(simpleMatcher{
 		name:     "isKind",
 		matches:  func(a dsl.Assertion) bool { return a.IsKind != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalIsKind(a.IsKind, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "isAPIVersion",
 		matches:  func(a dsl.Assertion) bool { return a.IsAPIVersion != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalIsAPIVersion(a.IsAPIVersion, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "hasDocuments",
 		matches:  func(a dsl.Assertion) bool { return a.HasDocuments != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalHasDocuments(a.HasDocuments, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "failedTemplate",
 		matches:  func(a dsl.Assertion) bool { return a.FailedTemplate != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalFailedTemplate(a.FailedTemplate, ctx) },
 	})
 }

@@ -13,43 +13,36 @@ func init() {
 	Register(simpleMatcher{
 		name:     "contains",
 		matches:  func(a dsl.Assertion) bool { return a.Contains != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalContains(a.Contains, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "notContains",
 		matches:  func(a dsl.Assertion) bool { return a.NotContains != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalNotContains(a.NotContains, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "startsWith",
 		matches:  func(a dsl.Assertion) bool { return a.StartsWith != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalStartsWith(a.StartsWith, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "endsWith",
 		matches:  func(a dsl.Assertion) bool { return a.EndsWith != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalEndsWith(a.EndsWith, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "matchRegex",
 		matches:  func(a dsl.Assertion) bool { return a.MatchRegex != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalMatchRegex(a.MatchRegex, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "notMatchRegex",
 		matches:  func(a dsl.Assertion) bool { return a.NotMatchRegex != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalNotMatchRegex(a.NotMatchRegex, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "matchTemplate",
 		matches:  func(a dsl.Assertion) bool { return a.MatchTemplate != nil },
-		tiers:    AllTiers,
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalMatchTemplate(a.MatchTemplate, ctx) },
 	})
 }

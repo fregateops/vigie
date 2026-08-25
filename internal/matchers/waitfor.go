@@ -14,13 +14,11 @@ func init() {
 	Register(simpleMatcher{
 		name:     "waitFor",
 		matches:  func(a dsl.Assertion) bool { return a.WaitFor != nil },
-		tiers:    Tiers(TierSimulated, TierE2E),
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalWaitFor(a.WaitFor, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "becomesReady",
 		matches:  func(a dsl.Assertion) bool { return a.BecomesReady != nil },
-		tiers:    Tiers(TierSimulated, TierE2E),
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalBecomesReady(a.BecomesReady, ctx) },
 	})
 }

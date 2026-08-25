@@ -13,13 +13,11 @@ func init() {
 	Register(simpleMatcher{
 		name:     "applies",
 		matches:  func(a dsl.Assertion) bool { return a.Applies != nil },
-		tiers:    Tiers(TierAPIServer, TierSimulated, TierE2E),
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalApplies(a.Applies, ctx) },
 	})
 	Register(simpleMatcher{
 		name:     "rejected",
 		matches:  func(a dsl.Assertion) bool { return a.Rejected != nil },
-		tiers:    Tiers(TierAPIServer, TierSimulated, TierE2E),
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalRejected(a.Rejected, ctx) },
 	})
 }

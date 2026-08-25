@@ -2,31 +2,14 @@ package matchers
 
 import "github.com/fregateops/vigie/internal/dsl"
 
-// Tier names. These match the values produced by runner.backendTier and the
-// values users write under `tier:` in test files. Kept as constants so every
-// reference can be checked at compile time.
+// Aliases onto internal/dsl, which owns the tier names alongside the
+// capability tags that define them.
 const (
-	TierTemplate  = "template"
-	TierAPIServer = "apiserver"
-	TierSimulated = "simulated"
-	TierE2E       = "e2e"
+	TierTemplate  = dsl.TierTemplate
+	TierAPIServer = dsl.TierAPIServer
+	TierSimulated = dsl.TierSimulated
+	TierE2E       = dsl.TierE2E
 )
-
-// AllTiers is the supported-tier list returned by the majority of matchers —
-// every assertion that doesn't need a live cluster (equal, exists, contains,
-// matchRegex, isType, matchSnapshot, matchSchema, expr, …) returns this.
-// Defined as a package-level value so 31 matcher files share one literal
-// instead of each rebuilding the slice.
-//
-// IMPORTANT: never mutate. The Tiers helper exists for callers who need a
-// fresh slice; AllTiers is read-only by convention.
-var AllTiers = []string{TierTemplate, TierAPIServer, TierSimulated, TierE2E}
-
-// Tiers builds a defensive-copied list. Used by matchers that support a
-// proper subset of tiers (applies, waitFor, http, …) so the per-matcher
-// SupportedTiers method can return a fresh slice the caller can mutate
-// safely.
-func Tiers(t ...string) []string { return append([]string(nil), t...) }
 
 // TierInList reports whether active appears in the supported list. The
 // list-based model replaces the rank-based TierSatisfies — every matcher
@@ -41,16 +24,17 @@ func TierInList(active string, supported []string) bool {
 	return false
 }
 
-// SupportedTiersFor returns the list of tiers under which the assertion can
-// run. Looks up the matcher in the registry and asks it. Unknown matchers
-// (no Matches predicate claims the assertion) get AllTiers as a charitable
-// default — the runner already surfaces unknown matchers via Evaluate's
-// fallback message, so the tier gate doesn't need to fire too.
+// SupportedTiersFor returns the tiers under which the assertion can run,
+// derived from the capabilities its matcher declares in internal/dsl.
+//
+// An assertion no matcher claims needs everything, so it runs only at the most
+// capable tier: failing closed, where granting every tier would let a forgotten
+// registry entry produce a wrong result instead of a skip.
 func SupportedTiersFor(a dsl.Assertion) []string {
 	if m, ok := find(a); ok {
 		return m.SupportedTiers(a)
 	}
-	return Tiers(AllTiers...)
+	return []string{TierE2E}
 }
 
 // intersectTiers returns the slice of labels common to a and b, preserving
@@ -77,7 +61,7 @@ func intersectTiers(a, b []string) []string {
 // we don't treat anyOf as a union here.
 func intersectChildTiers(children []dsl.Assertion) []string {
 	if len(children) == 0 {
-		return Tiers(AllTiers...)
+		return dsl.AllTiers()
 	}
 	result := SupportedTiersFor(children[0])
 	for _, child := range children[1:] {

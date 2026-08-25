@@ -14,7 +14,6 @@ func init() {
 	Register(simpleMatcher{
 		name:     "eventEmitted",
 		matches:  func(a dsl.Assertion) bool { return a.EventEmitted != nil },
-		tiers:    Tiers(TierSimulated, TierE2E),
 		evaluate: func(a dsl.Assertion, ctx EvalContext) Result { return evalEventEmitted(a.EventEmitted, ctx) },
 	})
 }
