@@ -1,5 +1,6 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/fregateops/vigie/refs/heads/main/pkg/api/schema/v1/testfile.json
 suite: dependency ordering and lifecycle hooks
+tier: e2e
 
 # Stages the secrets a production nginx deployment consumes, then installs the
 # chart on top - all against a real cluster:
@@ -14,9 +15,6 @@ suite: dependency ordering and lifecycle hooks
 #
 # beforeAll/afterAll run once around the whole suite - coarse setup and
 # teardown every test shares.
-
-cluster:
-  backend: kind
 
 defaults:
   release:

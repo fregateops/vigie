@@ -1,5 +1,6 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/fregateops/vigie/refs/heads/main/pkg/api/schema/v1/testfile.json
 suite: apply-tier matcher showcase
+tier: e2e
 
 # Every apply-tier matcher exercised against a real cluster the user already
 # has. Run with:
@@ -18,9 +19,6 @@ suite: apply-tier matcher showcase
 # The chart labels every workload with app.kubernetes.io/name=basic and
 # app.kubernetes.io/instance=<release>, and names the container "basic" after
 # the chart. Live matchers select on those.
-
-cluster:
-  backend: kubeconfig
 
 defaults:
   release:

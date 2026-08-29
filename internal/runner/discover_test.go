@@ -30,17 +30,21 @@ tests:
       - exists: { path: kind }
 `
 
+	// Every assertion needs a live cluster, so no test in this suite can run at
+	// the template tier. What excludes it is that requirement, not its path or
+	// the shape of its keys.
 	integrationSuiteYAML = `suite: i
-cluster:
-  backend: kind
+tier: e2e
 tests:
   - it: ok
     asserts:
-      - exists: { path: kind }
+      - logsContain:
+          pod: { name: app }
+          pattern: ready
 `
 )
 
-func TestDiscoverTestFiles_DefaultRoot_PicksUnitOnly(t *testing.T) {
+func TestDiscoverTestFiles_DefaultRoot_SkipsWhatCannotRunAtTemplate(t *testing.T) {
 	chart := t.TempDir()
 	unitPath := writeFile(t, chart, "tests/unit/deployment_test.yaml", unitSuiteYAML)
 	writeFile(t, chart, "tests/integration/e2e_test.yaml", integrationSuiteYAML)

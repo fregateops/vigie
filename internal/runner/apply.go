@@ -197,12 +197,12 @@ func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult
 	slog.Debug("loading test file", "file", filePath)
 	start := time.Now()
 
-	suite, kind, err := dsl.ParseSuiteAuto(filePath)
+	suite, err := dsl.ParseFile(filePath)
 	if err != nil {
 		return SuiteResult{File: filePath}, fmt.Errorf("setup error: %w", err)
 	}
 	dsl.MergeInputs(suite)
-	slog.Debug("parsed suite", "file", filePath, "kind", kind, "suite", suite.SuiteName)
+	slog.Debug("parsed suite", "file", filePath, "tier", suite.SuiteTier(), "suite", suite.SuiteName)
 
 	sr := SuiteResult{File: filePath, Suite: suite.SuiteName}
 

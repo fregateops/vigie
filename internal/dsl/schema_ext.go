@@ -88,4 +88,15 @@ func (Suite) JSONSchemaExtend(schema *jsonschema.Schema) {
 		tiers[tier] = TierCapabilities(tier)
 	}
 	schema.Extras = map[string]any{"x-vigie-tiers": tiers}
+
+	// Constrain `tier:` to what a --cluster value can actually reach, so editors
+	// never offer a tier whose backend does not exist.
+	if schema.Properties == nil {
+		return
+	}
+	if prop, ok := schema.Properties.Get("tier"); ok {
+		for _, tier := range RunnableTiers() {
+			prop.Enum = append(prop.Enum, tier)
+		}
+	}
 }
