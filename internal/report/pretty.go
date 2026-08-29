@@ -92,6 +92,9 @@ func (r *PrettyReporter) Report(results []runner.SuiteResult) error {
 	if skip > 0 {
 		summary += fmt.Sprintf(", %s skipped", skipColor.Sprintf("%d", skip))
 	}
+	if live, rendered := assertionSplit(results); live+rendered > 0 {
+		summary += durationColor.Sprintf(" (asserts: %d rendered, %d live)", rendered, live)
+	}
 	summary += fmt.Sprintf(" %s", durationColor.Sprintf("(%s total test time)", formatDuration(totalTestTime)))
 	fmt.Fprintln(r.Out, summary)
 
@@ -164,4 +167,18 @@ func severityToCI(sev lint.Severity) string {
 	default:
 		return "notice"
 	}
+}
+
+// assertionSplit totals how many assertions read live cluster state versus the
+// locally rendered manifests. At the cluster tiers ordinary matchers still read
+// rendered docs, so a run can install a chart and report green having asserted
+// nothing about the live objects - the split is what makes that visible.
+func assertionSplit(results []runner.SuiteResult) (live, rendered int) {
+	for _, sr := range results {
+		for _, tr := range sr.Results {
+			live += tr.LiveAsserts
+			rendered += tr.RenderedAsserts
+		}
+	}
+	return live, rendered
 }

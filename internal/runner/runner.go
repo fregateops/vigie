@@ -34,6 +34,11 @@ type TestResult struct {
 	Skipped    bool
 	SkipReason string        // populated when test.skip is a non-empty string
 	Duration   time.Duration // wall-clock time spent running this test
+	// How many of the test's assertions read live cluster state, and how many
+	// read the locally rendered manifests. Counted per assertion, not per
+	// evaluation: a forEach test evaluates each assertion once per document.
+	LiveAsserts     int
+	RenderedAsserts int
 }
 
 // SuiteResult groups results from one test file.

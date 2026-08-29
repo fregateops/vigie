@@ -82,3 +82,17 @@ func TestTAPReporter_ReportLint(t *testing.T) {
 		}
 	})
 }
+
+func TestTAPReporter_EmitsAssertionSplitDiagnostic(t *testing.T) {
+	var buf bytes.Buffer
+	r := &TAPReporter{Out: &buf}
+	if err := r.Report([]runner.SuiteResult{{
+		Suite:   "s",
+		Results: []runner.TestResult{{TestName: "t", Pass: true, RenderedAsserts: 4, LiveAsserts: 1}},
+	}}); err != nil {
+		t.Fatalf("Report: %v", err)
+	}
+	if want := "# asserts: 4 rendered, 1 live"; !strings.Contains(buf.String(), want) {
+		t.Errorf("TAP output missing %q:\n%s", want, buf.String())
+	}
+}

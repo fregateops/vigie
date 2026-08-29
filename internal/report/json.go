@@ -22,6 +22,9 @@ type jsonTest struct {
 	SkipReason string   `json:"skipReason,omitempty"`
 	Failures   []string `json:"failures,omitempty"`
 	DurationMs int64    `json:"durationMs"`
+	// Assertions that read live cluster state vs the rendered manifests.
+	RenderedAsserts int `json:"renderedAsserts"`
+	LiveAsserts     int `json:"liveAsserts"`
 }
 
 type jsonSuite struct {
@@ -36,6 +39,10 @@ type jsonSummary struct {
 	Passed  int `json:"passed"`
 	Failed  int `json:"failed"`
 	Skipped int `json:"skipped"`
+	// A cluster run with liveAsserts 0 installed a chart and then re-checked the
+	// same rendered YAML the template tier already checks.
+	RenderedAsserts int `json:"renderedAsserts"`
+	LiveAsserts     int `json:"liveAsserts"`
 }
 
 type jsonReport struct {
@@ -60,7 +67,12 @@ func (r *JSONReporter) Report(results []runner.SuiteResult) error {
 				SkipReason: tr.SkipReason,
 				Failures:   tr.Failures,
 				DurationMs: tr.Duration.Milliseconds(),
+
+				RenderedAsserts: tr.RenderedAsserts,
+				LiveAsserts:     tr.LiveAsserts,
 			})
+			out.Summary.RenderedAsserts += tr.RenderedAsserts
+			out.Summary.LiveAsserts += tr.LiveAsserts
 			out.Summary.Total++
 			switch {
 			case tr.Skipped:

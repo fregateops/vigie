@@ -145,6 +145,9 @@ func runTestCmd(cmd *cobra.Command, args []string) error {
 		if runner.AnyFailed(results) {
 			os.Exit(1)
 		}
+		if w := liveAssertionWarning(results); w != "" {
+			warnings = append(warnings, w)
+		}
 		executed, skipped := countTestOutcomes(results)
 		switch {
 		case executed+skipped == 0:
@@ -328,6 +331,34 @@ func emitWarnings(warnings []string) {
 	if len(warnings) > 0 && !flagTestPassOnWarning {
 		os.Exit(exitWarnings)
 	}
+}
+
+// liveAssertionWarning reports a cluster run whose assertions never looked at
+// the cluster. Ordinary matchers evaluate locally rendered manifests at every
+// tier, so such a run provisions a backend, installs the chart, and then
+// re-checks the same YAML the template tier already checked - green, slow, and
+// not the integration coverage its author believes they have.
+func liveAssertionWarning(results []runner.SuiteResult) string {
+	if flagTestCluster == clusterNone {
+		return ""
+	}
+	live, executed := 0, 0
+	for _, sr := range results {
+		for _, tr := range sr.Results {
+			if tr.Skipped {
+				continue
+			}
+			executed++
+			live += tr.LiveAsserts
+		}
+	}
+	if executed == 0 || live > 0 {
+		return ""
+	}
+	return fmt.Sprintf(
+		"--cluster %s ran %d test(s) but no assertion read live cluster state: "+
+			"every assertion checked the rendered manifests, which `vigie test` already does",
+		flagTestCluster, executed)
 }
 
 // countTestOutcomes splits the test cases across all suites into those that

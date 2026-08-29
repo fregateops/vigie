@@ -111,3 +111,53 @@ func TestJSONReporter_ReportLint(t *testing.T) {
 		t.Errorf("finding mismatch: %+v", got.Findings[0])
 	}
 }
+
+// The rendered/live split is what tells a consumer whether a cluster run
+// actually looked at the cluster, so it must survive into machine-readable
+// output and not just the pretty summary.
+func TestJSONReporter_ReportsAssertionSplit(t *testing.T) {
+	var buf bytes.Buffer
+	r := &JSONReporter{Out: &buf}
+	err := r.Report([]runner.SuiteResult{{
+		Suite: "s",
+		Results: []runner.TestResult{
+			{TestName: "rendered only", Pass: true, RenderedAsserts: 3},
+			{TestName: "touches the cluster", Pass: true, RenderedAsserts: 1, LiveAsserts: 2},
+			{TestName: "skipped", Pass: true, Skipped: true},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("Report: %v", err)
+	}
+
+	var doc struct {
+		Suites []struct {
+			Tests []struct {
+				Name            string `json:"name"`
+				RenderedAsserts int    `json:"renderedAsserts"`
+				LiveAsserts     int    `json:"liveAsserts"`
+			} `json:"tests"`
+		} `json:"suites"`
+		Summary struct {
+			RenderedAsserts int `json:"renderedAsserts"`
+			LiveAsserts     int `json:"liveAsserts"`
+		} `json:"summary"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &doc); err != nil {
+		t.Fatalf("parsing report: %v", err)
+	}
+	if got, want := doc.Summary.RenderedAsserts, 4; got != want {
+		t.Errorf("summary.renderedAsserts = %d, want %d", got, want)
+	}
+	if got, want := doc.Summary.LiveAsserts, 2; got != want {
+		t.Errorf("summary.liveAsserts = %d, want %d", got, want)
+	}
+	tests := doc.Suites[0].Tests
+	if tests[1].LiveAsserts != 2 || tests[1].RenderedAsserts != 1 {
+		t.Errorf("per-test split lost: %+v", tests[1])
+	}
+	// A skipped test asserted nothing, so it contributes nothing.
+	if tests[2].LiveAsserts != 0 || tests[2].RenderedAsserts != 0 {
+		t.Errorf("skipped test should count no assertions: %+v", tests[2])
+	}
+}
