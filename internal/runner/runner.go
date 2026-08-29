@@ -704,11 +704,15 @@ func SuiteHasFailure(sr SuiteResult) bool {
 }
 
 // DiscoverTestFiles walks the configured tests directory recursively and
-// returns every `*_test.yaml` file that declares the unit-suite shape (no
-// top-level `cluster:` or `dependencies:`). testsDir overrides the default
-// `<chartPath>/tests` root; relative testsDir resolves against chartPath.
+// returns every `*_test.yaml` file with at least one test that can run at the
+// template tier. testsDir overrides the default `<chartPath>/tests` root;
+// relative testsDir resolves against chartPath.
+//
+// The filter is what a file *needs*, not what its `tier:` declares: `tier:` is
+// a ceiling on content, so a suite that declares e2e but asserts only on
+// rendered manifests still belongs in a template run.
 func DiscoverTestFiles(chartPath, testsDir string) ([]string, error) {
-	return discoverTestFiles(chartPath, testsDir, dsl.UnitSuiteKind)
+	return discoverTestFiles(chartPath, testsDir, matchers.TierTemplate)
 }
 
 // resolveTestsRoot resolves the user-configured testsDir against the chart
@@ -725,11 +729,10 @@ func resolveTestsRoot(chartPath, testsDir string) string {
 }
 
 // discoverTestFiles walks resolveTestsRoot(chartPath, testsDir) recursively for
-// files matching `*_test.yaml`, filters by suite kind, and returns the results
-// sorted by path. An empty `want` returns every test file regardless of shape.
-// A missing root directory yields an empty slice (matches the pre-issue-64
-// behaviour of glob-against-missing-dir).
-func discoverTestFiles(chartPath, testsDir string, want dsl.SuiteKind) ([]string, error) {
+// files matching `*_test.yaml` and returns them sorted by path. An empty
+// `tier` keeps every file; otherwise a file is kept only if some test in it can
+// run at that tier. A missing root directory yields an empty slice.
+func discoverTestFiles(chartPath, testsDir, tier string) ([]string, error) {
 	root := resolveTestsRoot(chartPath, testsDir)
 
 	info, err := os.Stat(root)
@@ -754,15 +757,19 @@ func discoverTestFiles(chartPath, testsDir string, want dsl.SuiteKind) ([]string
 		if !strings.HasSuffix(entry.Name(), "_test.yaml") {
 			return nil
 		}
-		if want == "" {
+		if tier == "" {
 			matches = append(matches, path)
 			return nil
 		}
-		kind, kerr := dsl.DetectKind(path)
-		if kerr != nil {
-			return kerr
+		suite, perr := dsl.ParseFile(path)
+		if perr != nil {
+			// Keep the file: the runner reports a parse failure against the file
+			// that caused it, where dropping it here would either hide the error
+			// or abort the whole walk over one bad suite.
+			matches = append(matches, path)
+			return nil
 		}
-		if kind == want {
+		if unrunnable, _ := UnrunnableAt(suite, tier); !unrunnable {
 			matches = append(matches, path)
 		}
 		return nil

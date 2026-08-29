@@ -8,6 +8,16 @@ type Suite struct {
 	// Human-readable name for this test file.
 	SuiteName string `yaml:"suite" json:"suite"`
 
+	// Schema version of this file. Optional and currently unused; reserved so a
+	// future format change has something to branch on.
+	Version string `yaml:"version" json:"version,omitempty"`
+
+	// Highest tier this suite's assertions may require: template (the default),
+	// apiserver, or e2e. A matcher needing more than the declared tier is an
+	// error. It bounds what the file may contain, not where it runs - a suite
+	// whose assertions all work at a lower tier still runs there.
+	Tier string `yaml:"tier" json:"tier,omitempty"`
+
 	// Unit-tier only (vigie test). Limits rendering to these templates (paths relative to chart root);
 	// if omitted, all templates render. In apply-tier suites (test-apply api|simulated|e2e) this is ignored —
 	// use target: per test to scope matchers instead.
@@ -19,9 +29,6 @@ type Suite struct {
 
 	// Optional chart override for this suite.
 	Chart *ChartSpec `yaml:"chart" json:"chart,omitempty"`
-
-	// Cluster backend for live tiers (apiserver/simulated/e2e).
-	Cluster *ClusterSpec `yaml:"cluster" json:"cluster,omitempty"`
 
 	// Default inputs applied to every test in this suite.
 	Defaults *Inputs `yaml:"defaults" json:"defaults,omitempty"`
@@ -378,34 +385,7 @@ type RejectedSpec struct {
 	Message string `yaml:"message" json:"message,omitempty"`
 }
 
-// Integration-tier types follow. These are used by test-apply simulated/e2e tiers.
-
-// ClusterSpec selects the cluster backend used by live tiers.
-type ClusterSpec struct {
-	// Cluster backend name.
-	Backend string `yaml:"backend" json:"backend,omitempty" jsonschema:"enum=kind,enum=k3d,enum=kubeconfig,enum=envtest,enum=simulated"`
-
-	// Kubernetes version string (semver).
-	KubeVersion string `yaml:"kubeVersion" json:"kubeVersion,omitempty" jsonschema:"pattern=^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"`
-
-	// Number of nodes to provision (where supported).
-	Nodes int `yaml:"nodes" json:"nodes,omitempty" jsonschema:"minimum=1"`
-
-	// Path to an external kubeconfig (for the kubeconfig backend).
-	Kubeconfig string `yaml:"kubeconfig" json:"kubeconfig,omitempty"`
-
-	// Optional kwok node simulator configuration.
-	Kwok *KwokSpec `yaml:"kwok,omitempty" json:"kwok,omitempty"`
-}
-
-// KwokSpec configures the kwok node simulator.
-type KwokSpec struct {
-	// Whether to enable kwok.
-	Enabled bool `yaml:"enabled" json:"enabled,omitempty"`
-
-	// Number of kwok nodes to provision.
-	NodeCount int `yaml:"nodeCount,omitempty" json:"nodeCount,omitempty" jsonschema:"minimum=1"`
-}
+// Integration-tier types follow. These are used by the cluster tiers.
 
 // Dependency declares a resource that must be installed before tests run.
 type Dependency struct {

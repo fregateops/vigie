@@ -56,22 +56,14 @@ func TestParse_InvalidFailsBeforeUnmarshal(t *testing.T) {
 	}
 }
 
-func TestDetectSuiteKind(t *testing.T) {
-	cases := []struct {
-		name string
-		doc  string
-		want SuiteKind
-	}{
-		{"plain suite is unit", minimalValidSuite, UnitSuiteKind},
-		{"cluster: makes it integration", "suite: x\ncluster:\n  type: kind\ntests: []\n", IntegrationSuiteKind},
-		{"dependencies: makes it integration", "suite: x\ndependencies:\n  - name: db\ntests: []\n", IntegrationSuiteKind},
+// A suite's tier defaults to the strictest one, so an undeclared file is held
+// to render-only matchers rather than quietly allowed anything.
+func TestSuiteTier_DefaultsToTemplate(t *testing.T) {
+	if got := (&Suite{}).SuiteTier(); got != TierTemplate {
+		t.Errorf("SuiteTier() on an undeclared suite = %q, want %q", got, TierTemplate)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := detectSuiteKind([]byte(tc.doc)); got != tc.want {
-				t.Errorf("detectSuiteKind = %q, want %q", got, tc.want)
-			}
-		})
+	if got := (&Suite{Tier: TierE2E}).SuiteTier(); got != TierE2E {
+		t.Errorf("SuiteTier() = %q, want %q", got, TierE2E)
 	}
 }
 

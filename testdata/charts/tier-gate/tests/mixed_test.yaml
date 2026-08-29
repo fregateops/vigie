@@ -4,6 +4,7 @@
 # and the `applies` assertion is skipped with the flag that would run it; at a
 # cluster tier both run. Guards the tier gate in both runners.
 suite: mixed tiers
+tier: apiserver
 templates:
   - templates/deployment.yaml
 tests:

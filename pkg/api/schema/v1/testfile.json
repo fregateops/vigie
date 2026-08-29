@@ -255,42 +255,6 @@
       "type": "object",
       "description": "ChartSpec optionally overrides the chart used by a suite."
     },
-    "ClusterSpec": {
-      "properties": {
-        "backend": {
-          "type": "string",
-          "enum": [
-            "kind",
-            "k3d",
-            "kubeconfig",
-            "envtest",
-            "simulated"
-          ],
-          "description": "Cluster backend name."
-        },
-        "kubeVersion": {
-          "type": "string",
-          "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$",
-          "description": "Kubernetes version string (semver)."
-        },
-        "nodes": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "Number of nodes to provision (where supported)."
-        },
-        "kubeconfig": {
-          "type": "string",
-          "description": "Path to an external kubeconfig (for the kubeconfig backend)."
-        },
-        "kwok": {
-          "$ref": "#/$defs/KwokSpec",
-          "description": "Optional kwok node simulator configuration."
-        }
-      },
-      "additionalProperties": false,
-      "type": "object",
-      "description": "ClusterSpec selects the cluster backend used by live tiers."
-    },
     "Dependency": {
       "properties": {
         "name": {
@@ -651,22 +615,6 @@
       "additionalProperties": false,
       "type": "object",
       "description": "IsTypeSpec is used by the isType matcher."
-    },
-    "KwokSpec": {
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "description": "Whether to enable kwok."
-        },
-        "nodeCount": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "Number of kwok nodes to provision."
-        }
-      },
-      "additionalProperties": false,
-      "type": "object",
-      "description": "KwokSpec configures the kwok node simulator."
     },
     "LengthEqualSpec": {
       "properties": {
@@ -1140,6 +1088,19 @@
       "type": "string",
       "description": "Human-readable name for this test file."
     },
+    "version": {
+      "type": "string",
+      "description": "Schema version of this file. Optional and currently unused; reserved so a\nfuture format change has something to branch on."
+    },
+    "tier": {
+      "type": "string",
+      "enum": [
+        "template",
+        "apiserver",
+        "e2e"
+      ],
+      "description": "Highest tier this suite's assertions may require: template (the default),\napiserver, or e2e. A matcher needing more than the declared tier is an\nerror. It bounds what the file may contain, not where it runs - a suite\nwhose assertions all work at a lower tier still runs there."
+    },
     "templates": {
       "items": {
         "type": "string"
@@ -1157,10 +1118,6 @@
     "chart": {
       "$ref": "#/$defs/ChartSpec",
       "description": "Optional chart override for this suite."
-    },
-    "cluster": {
-      "$ref": "#/$defs/ClusterSpec",
-      "description": "Cluster backend for live tiers (apiserver/simulated/e2e)."
     },
     "defaults": {
       "$ref": "#/$defs/Inputs",
