@@ -2,6 +2,7 @@ package runner
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/fregateops/vigie/internal/dsl"
 	"github.com/fregateops/vigie/internal/matchers"
@@ -107,8 +108,9 @@ func UnrunnableAt(suite *dsl.Suite, tier string) (unrunnable bool, reason string
 // `--cluster simulated` still rejects. Naming a flag that errors out is worse
 // than saying nothing.
 func clusterHintForTier(needTier string) string {
-	if needTier == matchers.TierAPIServer {
-		return "--cluster envtest (or kind|k3d|kubeconfig)"
+	backends := dsl.BackendsForTier(needTier)
+	if len(backends) == 0 {
+		return "vigie test (no --cluster)"
 	}
-	return "--cluster kind|k3d|kubeconfig"
+	return "--cluster " + strings.Join(backends, "|")
 }

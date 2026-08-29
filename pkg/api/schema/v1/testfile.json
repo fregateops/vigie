@@ -152,35 +152,65 @@
         },
         "applies": {
           "$ref": "#/$defs/AppliesSpec",
-          "description": "Asserts the resource is accepted by the API server (admission, schema, RBAC, immutability). Apply tiers only (test-apply api/simulated/e2e)."
+          "description": "Asserts the resource is accepted by the API server (admission, schema, RBAC, immutability). Apply tiers only (test-apply api/simulated/e2e).\n\nNeeds apiServerAdmission: run with --cluster envtest|kind|k3d|kubeconfig.",
+          "x-vigie-capabilities": [
+            "apiServerAdmission"
+          ]
         },
         "rejected": {
           "$ref": "#/$defs/RejectedSpec",
-          "description": "Asserts the resource is rejected by the API server, optionally matching reason/message. Apply tiers only (test-apply api/simulated/e2e)."
+          "description": "Asserts the resource is rejected by the API server, optionally matching reason/message. Apply tiers only (test-apply api/simulated/e2e).\n\nNeeds apiServerAdmission: run with --cluster envtest|kind|k3d|kubeconfig.",
+          "x-vigie-capabilities": [
+            "apiServerAdmission"
+          ]
         },
         "waitFor": {
           "$ref": "#/$defs/WaitForSpec",
-          "description": "Polls until the resource reports the given status condition. Apply tiers simulated and e2e only."
+          "description": "Polls until the resource reports the given status condition. Apply tiers simulated and e2e only.\n\nNeeds liveReads + reconciliation: run with --cluster kind|k3d|kubeconfig.",
+          "x-vigie-capabilities": [
+            "liveReads",
+            "reconciliation"
+          ]
         },
         "becomesReady": {
           "$ref": "#/$defs/WaitForSpec",
-          "description": "Polls until the resource is Ready (readiness inferred per kind). Apply tiers simulated and e2e only."
+          "description": "Polls until the resource is Ready (readiness inferred per kind). Apply tiers simulated and e2e only.\n\nNeeds liveReads + reconciliation: run with --cluster kind|k3d|kubeconfig.",
+          "x-vigie-capabilities": [
+            "liveReads",
+            "reconciliation"
+          ]
         },
         "http": {
           "$ref": "#/$defs/HTTPAssert",
-          "description": "Sends an HTTP request to a target in the cluster and asserts on the response. e2e tier only."
+          "description": "Sends an HTTP request to a target in the cluster and asserts on the response. e2e tier only.\n\nNeeds runningPods + networkEgress: run with --cluster kind|k3d|kubeconfig.",
+          "x-vigie-capabilities": [
+            "runningPods",
+            "networkEgress"
+          ]
         },
         "lookup": {
           "$ref": "#/$defs/LookupAssert",
-          "description": "Fetches a live resource and runs nested assertions on it. Apply tiers simulated and e2e only."
+          "description": "Fetches a live resource and runs nested assertions on it. Apply tiers simulated and e2e only.\n\nNeeds liveReads + reconciliation: run with --cluster kind|k3d|kubeconfig.",
+          "x-vigie-capabilities": [
+            "liveReads",
+            "reconciliation"
+          ]
         },
         "logsContain": {
           "$ref": "#/$defs/LogsAssert",
-          "description": "Asserts a pod's logs contain a substring or /regex/ within a timeout. e2e tier only."
+          "description": "Asserts a pod's logs contain a substring or /regex/ within a timeout. e2e tier only.\n\nNeeds runningPods + podLogs: run with --cluster kind|k3d|kubeconfig.",
+          "x-vigie-capabilities": [
+            "runningPods",
+            "podLogs"
+          ]
         },
         "eventEmitted": {
           "$ref": "#/$defs/EventAssert",
-          "description": "Asserts a Kubernetes Event with the given reason/type was emitted for the involved object. Apply tiers simulated and e2e only."
+          "description": "Asserts a Kubernetes Event with the given reason/type was emitted for the involved object. Apply tiers simulated and e2e only.\n\nNeeds liveReads + reconciliation: run with --cluster kind|k3d|kubeconfig.",
+          "x-vigie-capabilities": [
+            "liveReads",
+            "reconciliation"
+          ]
         }
       },
       "additionalProperties": false,
@@ -1172,5 +1202,24 @@
     "tests"
   ],
   "title": "Vigie test file",
-  "description": "Suite is the top-level structure of a test file."
+  "description": "Suite is the top-level structure of a test file.",
+  "x-vigie-tiers": {
+    "apiserver": [
+      "renderedManifests",
+      "apiServerAdmission",
+      "liveReads"
+    ],
+    "e2e": [
+      "renderedManifests",
+      "apiServerAdmission",
+      "liveReads",
+      "reconciliation",
+      "runningPods",
+      "podLogs",
+      "networkEgress"
+    ],
+    "template": [
+      "renderedManifests"
+    ]
+  }
 }

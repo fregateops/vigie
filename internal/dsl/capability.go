@@ -86,6 +86,75 @@ func TiersProviding(needs []Capability) []string {
 	return out
 }
 
+// backendTiers is the tier each `--cluster` value runs at. Mirrors the factory
+// in internal/cluster; simulated is absent because the factory cannot build it
+// yet, so nothing should ever point a user at it.
+var backendTiers = map[string]string{
+	"envtest":    TierAPIServer,
+	"kind":       TierE2E,
+	"k3d":        TierE2E,
+	"kubeconfig": TierE2E,
+}
+
+// TierCapabilities returns everything a tier provides, inherited tiers
+// included, in ladder order.
+func TierCapabilities(tier string) []Capability {
+	var out []Capability
+	for _, t := range AllTiers() {
+		out = append(out, tierCapabilities[t]...)
+		if t == tier {
+			return out
+		}
+	}
+	return nil
+}
+
+// RunnableTiers lists the tiers a backend can actually run at. simulated is
+// absent until its backend lands, so nothing advertises a tier no `--cluster`
+// value reaches.
+func RunnableTiers() []string {
+	var out []string
+	for _, tier := range AllTiers() {
+		if tier == TierTemplate || hasBackendAt(tier) {
+			out = append(out, tier)
+		}
+	}
+	return out
+}
+
+func hasBackendAt(tier string) bool {
+	for _, t := range backendTiers {
+		if t == tier {
+			return true
+		}
+	}
+	return false
+}
+
+// BackendsForTier lists the `--cluster` values that satisfy tier, least capable
+// first. The template tier needs no cluster, so it returns nothing.
+func BackendsForTier(tier string) []string {
+	if tier == TierTemplate {
+		return nil
+	}
+	var out []string
+	for _, backend := range []string{"envtest", "kind", "k3d", "kubeconfig"} {
+		if tierRank(backendTiers[backend]) >= tierRank(tier) {
+			out = append(out, backend)
+		}
+	}
+	return out
+}
+
+func tierRank(tier string) int {
+	for i, t := range AllTiers() {
+		if t == tier {
+			return i
+		}
+	}
+	return -1
+}
+
 // Matcher YAML key -> capabilities, read once from the tags on Assertion.
 var matcherCapabilities = buildMatcherCapabilities()
 
