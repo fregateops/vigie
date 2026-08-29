@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,13 +23,16 @@ type junitTestSuites struct {
 }
 
 type junitTestSuite struct {
-	XMLName   xml.Name        `xml:"testsuite"`
-	Name      string          `xml:"name,attr"`
-	Tests     int             `xml:"tests,attr"`
-	Failures  int             `xml:"failures,attr"`
-	Skipped   int             `xml:"skipped,attr"`
-	Time      string          `xml:"time,attr"`
-	TestCases []junitTestCase `xml:"testcase"`
+	XMLName  xml.Name `xml:"testsuite"`
+	Name     string   `xml:"name,attr"`
+	Tests    int      `xml:"tests,attr"`
+	Failures int      `xml:"failures,attr"`
+	Skipped  int      `xml:"skipped,attr"`
+	Time     string   `xml:"time,attr"`
+	// Properties is JUnit's standard extension point, and must precede the test
+	// cases: consumers expect it as the first child of testsuite.
+	Properties *junitProperties `xml:"properties,omitempty"`
+	TestCases  []junitTestCase  `xml:"testcase"`
 }
 
 type junitTestCase struct {
@@ -38,6 +42,19 @@ type junitTestCase struct {
 	Time      string        `xml:"time,attr"`
 	Failure   *junitFailure `xml:"failure,omitempty"`
 	Skipped   *junitSkipped `xml:"skipped,omitempty"`
+}
+
+// junitProperties carries per-suite key/value metadata. Used for the
+// rendered/live assertion split, which has no dedicated JUnit element.
+type junitProperties struct {
+	XMLName    xml.Name        `xml:"properties"`
+	Properties []junitProperty `xml:"property"`
+}
+
+type junitProperty struct {
+	XMLName xml.Name `xml:"property"`
+	Name    string   `xml:"name,attr"`
+	Value   string   `xml:"value,attr"`
 }
 
 type junitFailure struct {
@@ -57,8 +74,11 @@ func (r *JUnitReporter) Report(results []runner.SuiteResult) error {
 
 	for _, sr := range results {
 		suite := junitTestSuite{Name: sr.Suite, Time: junitTime(sr.Duration)}
+		var live, rendered int
 		for _, tr := range sr.Results {
 			suite.Tests++
+			live += tr.LiveAsserts
+			rendered += tr.RenderedAsserts
 			tc := junitTestCase{
 				Name:      tr.TestName,
 				ClassName: sr.Suite,
@@ -75,6 +95,12 @@ func (r *JUnitReporter) Report(results []runner.SuiteResult) error {
 				}
 			}
 			suite.TestCases = append(suite.TestCases, tc)
+		}
+		if live+rendered > 0 {
+			suite.Properties = &junitProperties{Properties: []junitProperty{
+				{Name: "vigie.asserts.rendered", Value: strconv.Itoa(rendered)},
+				{Name: "vigie.asserts.live", Value: strconv.Itoa(live)},
+			}}
 		}
 		suites.TestSuites = append(suites.TestSuites, suite)
 	}

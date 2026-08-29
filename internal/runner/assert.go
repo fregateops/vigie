@@ -31,6 +31,14 @@ type applyEvalExtras struct {
 func evaluateAssertions(tr *TestResult, et expandedTest, suite *dsl.Suite, allDocs []map[string]any, renderErr error, store *snapshot.Store, extras applyEvalExtras) {
 	test := et.Test
 
+	for _, assertion := range test.Asserts {
+		if assertion.ReadsLiveState() {
+			tr.LiveAsserts++
+			continue
+		}
+		tr.RenderedAsserts++
+	}
+
 	evalContext := func(doc map[string]any, assertIdx int) matchers.EvalContext {
 		return matchers.EvalContext{
 			Docs:          allDocs,

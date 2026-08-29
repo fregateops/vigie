@@ -57,6 +57,9 @@ func (r *TAPReporter) Report(results []runner.SuiteResult) error {
 		}
 	}
 
+	if live, rendered := assertionSplit(results); live+rendered > 0 {
+		fmt.Fprintf(r.Out, "# asserts: %d rendered, %d live\n", rendered, live)
+	}
 	return nil
 }
 
