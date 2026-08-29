@@ -21,96 +21,165 @@
         },
         "equal": {
           "$ref": "#/$defs/PathValue",
-          "description": "Asserts the value at path deep-equals value (int/float normalized for YAML). All tiers."
+          "description": "Asserts the value at path deep-equals value (int/float normalized for YAML).\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "notEqual": {
           "$ref": "#/$defs/PathValue",
-          "description": "Asserts the value at path is not deep-equal to value. A missing path passes. All tiers."
+          "description": "Asserts the value at path is not deep-equal to value. A missing path passes.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "greaterThan": {
           "$ref": "#/$defs/PathValue",
-          "description": "Asserts the numeric value at path is strictly greater than value. All tiers."
+          "description": "Asserts the numeric value at path is strictly greater than value.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "lessThan": {
           "$ref": "#/$defs/PathValue",
-          "description": "Asserts the numeric value at path is strictly less than value. All tiers."
+          "description": "Asserts the numeric value at path is strictly less than value.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "gte": {
           "$ref": "#/$defs/PathValue",
-          "description": "Asserts the numeric value at path is greater than or equal to value. All tiers."
+          "description": "Asserts the numeric value at path is greater than or equal to value.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "lte": {
           "$ref": "#/$defs/PathValue",
-          "description": "Asserts the numeric value at path is less than or equal to value. All tiers."
+          "description": "Asserts the numeric value at path is less than or equal to value.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "contains": {
           "$ref": "#/$defs/PathContent",
-          "description": "Asserts the string at path contains the substring content, or the list at path contains the item. All tiers."
+          "description": "Asserts the string at path contains the substring content, or the list at path contains the item.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "notContains": {
           "$ref": "#/$defs/PathContent",
-          "description": "Asserts the string/list at path does not contain content. All tiers."
+          "description": "Asserts the string/list at path does not contain content.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "startsWith": {
           "$ref": "#/$defs/PathValue",
-          "description": "Asserts the string at path starts with value. All tiers."
+          "description": "Asserts the string at path starts with value.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "endsWith": {
           "$ref": "#/$defs/PathValue",
-          "description": "Asserts the string at path ends with value. All tiers."
+          "description": "Asserts the string at path ends with value.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "matchRegex": {
           "$ref": "#/$defs/PathPattern",
-          "description": "Asserts the string at path matches the RE2 regular expression pattern. All tiers."
+          "description": "Asserts the string at path matches the RE2 regular expression pattern.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "notMatchRegex": {
           "$ref": "#/$defs/PathPattern",
-          "description": "Asserts the string at path does not match the RE2 regular expression pattern. All tiers."
+          "description": "Asserts the string at path does not match the RE2 regular expression pattern.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "matchTemplate": {
           "$ref": "#/$defs/PathPattern",
-          "description": "Asserts the string at path matches a template pattern where ${VAR} placeholders match any text. All tiers."
+          "description": "Asserts the string at path matches a template pattern where ${VAR} placeholders match any text.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "exists": {
           "$ref": "#/$defs/PathOnly",
-          "description": "Asserts path is present (any value, including null). All tiers."
+          "description": "Asserts path is present (any value, including null).\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "notExists": {
           "$ref": "#/$defs/PathOnly",
-          "description": "Asserts path is absent. All tiers."
+          "description": "Asserts path is absent.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "isNull": {
           "$ref": "#/$defs/PathOnly",
-          "description": "Asserts the value at path is null. All tiers."
+          "description": "Asserts the value at path is null.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "isNotNull": {
           "$ref": "#/$defs/PathOnly",
-          "description": "Asserts the value at path is not null. All tiers."
+          "description": "Asserts the value at path is not null.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "isEmpty": {
           "$ref": "#/$defs/PathOnly",
-          "description": "Asserts the value at path is empty (empty string, list, map, or null). All tiers."
+          "description": "Asserts the value at path is empty (empty string, list, map, or null).\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "isNotEmpty": {
           "$ref": "#/$defs/PathOnly",
-          "description": "Asserts the value at path is not empty. All tiers."
+          "description": "Asserts the value at path is not empty.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "isKind": {
           "type": "string",
-          "description": "Asserts the selected document's kind field equals this value. All tiers."
+          "description": "Asserts the selected document's kind field equals this value.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "isAPIVersion": {
           "type": "string",
-          "description": "Asserts the selected document's apiVersion field equals this value. All tiers."
+          "description": "Asserts the selected document's apiVersion field equals this value.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "hasDocuments": {
           "type": "integer",
           "minimum": 0,
-          "description": "Asserts the render produced exactly this many YAML documents. All tiers."
+          "description": "Asserts the render produced exactly this many YAML documents.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "failedTemplate": {
           "$ref": "#/$defs/FailedTemplateSpec",
-          "description": "Asserts the render itself failed; optionally that the error matches errorPattern. All tiers."
+          "description": "Asserts the render itself failed; optionally that the error matches errorPattern.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "allOf": {
           "items": {
@@ -128,38 +197,56 @@
         },
         "isType": {
           "$ref": "#/$defs/IsTypeSpec",
-          "description": "Asserts the value at path is of type of. All tiers."
+          "description": "Asserts the value at path is of type of.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "lengthEqual": {
           "$ref": "#/$defs/LengthEqualSpec",
-          "description": "Asserts the collection at path has exactly value elements. All tiers."
+          "description": "Asserts the collection at path has exactly value elements.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "isSubset": {
           "$ref": "#/$defs/PathContent",
-          "description": "Asserts the map at path contains every key/value pair in content (deep-equal per key). All tiers."
+          "description": "Asserts the map at path contains every key/value pair in content (deep-equal per key).\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "matchSnapshot": {
           "$ref": "#/$defs/MatchSnapshotSpec",
-          "description": "Asserts the document matches the stored snapshot; writes on first run or with --update-snapshots. All tiers."
+          "description": "Asserts the document matches the stored snapshot; writes on first run or with --update-snapshots.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "matchSchema": {
           "$ref": "#/$defs/MatchSchemaSpec",
-          "description": "Asserts the value at path validates against an inline JSON Schema (draft 2020-12) fragment. All tiers."
+          "description": "Asserts the value at path validates against an inline JSON Schema (draft 2020-12) fragment.\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "expr": {
           "type": "string",
-          "description": "CEL expression that must evaluate to true. Bindings: resources, doc, release, values, matrix, case, output (helper tests). All tiers."
+          "description": "CEL expression that must evaluate to true. Bindings: resources, doc, release, values, matrix, case, output (helper tests).\n\nNeeds renderedManifests: runs at every tier.",
+          "x-vigie-capabilities": [
+            "renderedManifests"
+          ]
         },
         "applies": {
           "$ref": "#/$defs/AppliesSpec",
-          "description": "Asserts the resource is accepted by the API server (admission, schema, RBAC, immutability). Apply tiers only (test-apply api/simulated/e2e).\n\nNeeds apiServerAdmission: run with --cluster envtest|kind|k3d|kubeconfig.",
+          "description": "Asserts the resource is accepted by the API server (admission, schema, RBAC, immutability).\n\nNeeds apiServerAdmission: run with --cluster envtest|kind|k3d|kubeconfig.",
           "x-vigie-capabilities": [
             "apiServerAdmission"
           ]
         },
         "rejected": {
           "$ref": "#/$defs/RejectedSpec",
-          "description": "Asserts the resource is rejected by the API server, optionally matching reason/message. Apply tiers only (test-apply api/simulated/e2e).\n\nNeeds apiServerAdmission: run with --cluster envtest|kind|k3d|kubeconfig.",
+          "description": "Asserts the resource is rejected by the API server, optionally matching reason/message.\n\nNeeds apiServerAdmission: run with --cluster envtest|kind|k3d|kubeconfig.",
           "x-vigie-capabilities": [
             "apiServerAdmission"
           ]
@@ -1106,7 +1193,7 @@
         "type": "string"
       },
       "type": "array",
-      "description": "Unit-tier only (vigie test). Limits rendering to these templates (paths relative to chart root);\nif omitted, all templates render. In apply-tier suites (test-apply api|simulated|e2e) this is ignored —\nuse target: per test to scope matchers instead."
+      "description": "Template-tier only. Limits rendering to these templates (paths relative to\nthe chart root); if omitted, all templates render. Cluster tiers install\nthe whole chart regardless, so this is ignored there — scope those with\ntarget: per test instead."
     },
     "helpers": {
       "items": {

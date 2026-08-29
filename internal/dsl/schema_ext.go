@@ -48,26 +48,28 @@ func (Assertion) JSONSchemaExtend(schema *jsonschema.Schema) {
 	annotateMatcherTiers(schema)
 }
 
-// annotateMatcherTiers records what each cluster-tier matcher needs on its own
-// schema property, so an editor answers "can I use this here, and if not what
-// do I run?" on hover instead of the user finding out from a skipped run.
-// Matchers that work everywhere are left alone - there is nothing to warn about.
+// annotateMatcherTiers records what every matcher needs on its own schema
+// property, so an editor answers "can I use this here, and if not what do I
+// run?" on hover instead of the user finding out from a skipped run. Generated
+// rather than written by hand: prose restating a matcher's tiers goes stale the
+// day its capabilities change.
 func annotateMatcherTiers(schema *jsonschema.Schema) {
-	everywhere := len(AllTiers())
 	for name, needs := range matcherCapabilities {
-		tiers := TiersProviding(needs)
-		if len(tiers) == everywhere || len(tiers) == 0 {
-			continue
-		}
 		prop, ok := schema.Properties.Get(name)
 		if !ok {
 			continue
 		}
-		floor := tiers[0]
+		tiers := TiersProviding(needs)
+		if len(tiers) == 0 {
+			continue
+		}
+		where := "runs at every tier"
+		if len(tiers) < len(AllTiers()) {
+			where = "run with --cluster " + strings.Join(BackendsForTier(tiers[0]), "|")
+		}
 		prop.Extras = map[string]any{"x-vigie-capabilities": needs}
 		prop.Description = strings.TrimSpace(prop.Description + fmt.Sprintf(
-			"\n\nNeeds %s: run with --cluster %s.",
-			joinCapabilities(needs), strings.Join(BackendsForTier(floor), "|")))
+			"\n\nNeeds %s: %s.", joinCapabilities(needs), where))
 	}
 }
 

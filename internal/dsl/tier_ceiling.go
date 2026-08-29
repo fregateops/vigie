@@ -42,6 +42,26 @@ func ValidateTierCeiling(suite *Suite) error {
 	return nil
 }
 
+// ReadsLiveState reports whether an assertion observes the cluster rather than
+// the locally rendered manifests. At the cluster tiers ordinary matchers still
+// evaluate rendered docs, so this is what separates "installed and checked the
+// real thing" from "re-checked the same YAML with a cluster running".
+func (a Assertion) ReadsLiveState() bool {
+	for _, child := range slices.Concat(a.AllOf, a.AnyOf, nestedLookupAsserts(a)) {
+		if child.ReadsLiveState() {
+			return true
+		}
+	}
+	for _, m := range setMatchers(a) {
+		for _, need := range matcherCapabilities[m] {
+			if need != RenderedManifests {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // firstUnmetMatcher walks one assertion, recursing through composites and
 // lookup's nested assertions, and returns the first matcher whose capabilities
 // the tier does not provide.
