@@ -63,9 +63,11 @@ func TestSchemaAnnotatesClusterMatchers(t *testing.T) {
 		})
 	}
 
-	// A matcher that runs everywhere carries no requirement, so it stays clean.
-	if p := props["equal"]; len(p.Capabilities) != 0 || strings.Contains(p.Description, "--cluster") {
-		t.Errorf("equal should carry no annotation, got caps=%v desc=%q", p.Capabilities, p.Description)
+	// A matcher that runs everywhere still states what it needs, but points at
+	// no flag - there is nothing to pass.
+	if p := props["equal"]; !strings.Contains(p.Description, "runs at every tier") ||
+		strings.Contains(p.Description, "--cluster") {
+		t.Errorf("equal should say it runs everywhere and name no flag, got %q", p.Description)
 	}
 
 	// The root mapping is what lets a reader resolve those capability lists to a
@@ -110,5 +112,38 @@ func TestBackendsForTier(t *testing.T) {
 	// envtest reaches apiserver but not the tiers above it.
 	if got := BackendsForTier(TierE2E); len(got) > 0 && got[0] == "envtest" {
 		t.Errorf("envtest cannot satisfy the e2e tier, got %v", got)
+	}
+}
+
+func TestReadsLiveState(t *testing.T) {
+	cases := []struct {
+		name string
+		a    Assertion
+		want bool
+	}{
+		{"rendered matcher", Assertion{Equal: &PathValue{Path: "kind"}}, false},
+		{"admission is a cluster observation", Assertion{Applies: &AppliesSpec{}}, true},
+		{"live matcher", Assertion{HTTP: &HTTPAssert{}}, true},
+		{
+			// A composite is only as rendered-only as its children.
+			name: "live matcher nested in allOf",
+			a: Assertion{AllOf: []Assertion{
+				{Equal: &PathValue{Path: "kind"}},
+				{LogsContain: &LogsAssert{}},
+			}},
+			want: true,
+		},
+		{
+			name: "composite of rendered matchers",
+			a:    Assertion{AnyOf: []Assertion{{Equal: &PathValue{Path: "kind"}}}},
+			want: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.a.ReadsLiveState(); got != tc.want {
+				t.Errorf("ReadsLiveState() = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

@@ -166,6 +166,7 @@ under a `validate:` block in `.vigie.yaml` so CI and local runs stay consistent.
 
 ```yaml
 suite: <name>            # human-readable suite name
+tier: template           # highest tier this suite's matchers may need (optional)
 templates:               # limit rendering to these templates (optional)
   - templates/deployment.yaml
 
@@ -250,6 +251,42 @@ Any matcher accepts `not: true` to invert the result.
 Map keys that contain dots or slashes (such as the `app.kubernetes.io/name` label) use a quoted
 bracket segment: `metadata.labels["app.kubernetes.io/name"]` (single or double quotes). The same
 keys are also reachable from `expr:` via CEL, e.g. `doc.metadata.labels["app.kubernetes.io/name"]`.
+
+### Tiers, and the `tier:` field
+
+Matchers need different things from the environment. `equal:` reads a rendered manifest;
+`applies:` needs an API server to admit it; `logsContain:` needs a pod actually running. Those
+requirements form a ladder, and each rung provides everything below it:
+
+| `tier:` | provides | run it with |
+|---|---|---|
+| `template` (default) | rendered manifests | `vigie test` |
+| `apiserver` | + API-server admission, live reads | `vigie test --cluster envtest` |
+| `e2e` | + controllers, running pods, logs, network | `vigie test --cluster kind\|k3d\|kubeconfig` |
+
+A suite declares the highest tier its matchers may require:
+
+```yaml
+suite: app deploys and becomes ready
+tier: e2e
+```
+
+`tier:` is a **ceiling on what the file may contain, not a floor on where it runs.** Use a
+matcher above the declared tier and the file fails to load, naming the matcher and the fix:
+
+```
+test "logs show boot" uses "logsContain", which needs runningPods + podLogs and so
+cannot run at tier template: declare `tier: e2e` on the suite, or use a matcher that
+works at template
+```
+
+Omit it and the suite is held to `template` — so a render-only suite needs no ceremony, and a
+file that quietly grows a cluster matcher is caught rather than silently skipped later.
+
+Running *below* a suite's tier is fine: matchers that need more are reported as skips naming
+the flag that would run them, and a run where everything skipped fails rather than reporting a
+green pass over nothing. Running *above* it is fine too — a `tier: template` suite runs
+unchanged under `--cluster kind`, which is why the same files serve the fast loop and CI.
 
 ### Selecting a document
 
