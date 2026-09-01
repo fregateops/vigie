@@ -130,14 +130,14 @@ func CheckSetupEnvtest(kubeVersion string) (binaries *EnvtestBinaries, check Che
 	}
 
 	return &EnvtestBinaries{
-			APIServerPath: apiserverCandidate,
-			EtcdPath:      etcdCandidate,
-			Source:        fmt.Sprintf("setup-envtest (k8s %s)", kubeVersion),
-		}, Check{
-			Name:   "setup-envtest",
-			Status: StatusOK,
-			Detail: fmt.Sprintf("found at %s, binaries resolved to %s", setupEnvtestPath, resolvedPath),
-		}
+		APIServerPath: apiserverCandidate,
+		EtcdPath:      etcdCandidate,
+		Source:        fmt.Sprintf("setup-envtest (k8s %s)", kubeVersion),
+	}, Check{
+		Name:   "setup-envtest",
+		Status: StatusOK,
+		Detail: fmt.Sprintf("found at %s, binaries resolved to %s", setupEnvtestPath, resolvedPath),
+	}
 }
 
 // dirExists reports whether path is an existing directory.

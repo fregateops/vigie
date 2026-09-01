@@ -17,7 +17,7 @@
       in {
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
-            go_1_26
+            go_1_27
             gnumake
             pre-commit
             gitleaks
@@ -31,9 +31,9 @@
             export GOPATH="$HOME/go"
             export PATH="$GOPATH/bin:$PATH"
 
-            if ! golangci-lint --version 2>/dev/null | grep -q 'v2\.11\.4'; then
-              echo "Installing golangci-lint v2.11.4 (compiled with Go 1.26)..."
-              go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
+            if ! golangci-lint --version 2>/dev/null | grep -q 'v2\.13\.2'; then
+              echo "Installing golangci-lint v2.13.2 (compiled with Go 1.27)..."
+              go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
             fi
           '';
         };
