@@ -59,7 +59,7 @@ Go executables that run on NixOS as-is; a `nix profile install kind k3d` is pick
 
 ## Installation
 
-Build from source with Nix (Go 1.26):
+Build from source with Nix (Go 1.27):
 
 ```sh
 git clone https://github.com/fregateops/vigie
@@ -68,7 +68,7 @@ nix develop --command make build   # -> dist/vigie
 ./dist/vigie version
 ```
 
-Or with a local Go 1.26+ toolchain:
+Or with a local Go 1.27+ toolchain:
 
 ```sh
 go build -o vigie ./cmd/vigie

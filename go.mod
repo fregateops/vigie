@@ -1,6 +1,6 @@
 module github.com/fregateops/vigie
 
-go 1.26.5
+go 1.27
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
