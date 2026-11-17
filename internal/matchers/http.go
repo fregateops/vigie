@@ -480,8 +480,7 @@ func resolveViaPortForward(spec *dsl.HTTPAssert, restCfg *rest.Config, fallbackN
 
 	cleanup := func() {
 		close(stopChan)
-		// drain any error from the goroutine
-		<-errChan
+		<-errChan //nolint:errcheck // waits for forwarder shutdown; its error after an intentional stop is meaningless
 	}
 
 	return fmt.Sprintf("http://localhost:%d", localPort), cleanup, nil

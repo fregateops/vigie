@@ -31,9 +31,9 @@
             export GOPATH="$HOME/go"
             export PATH="$GOPATH/bin:$PATH"
 
-            if ! golangci-lint --version 2>/dev/null | grep -q 'v2\.13\.2'; then
-              echo "Installing golangci-lint v2.13.2 (compiled with Go 1.27)..."
-              go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
+            if ! golangci-lint --version 2>/dev/null | grep -q 'version 2\.15\.0'; then
+              echo "Installing golangci-lint v2.15.0 (compiled with Go 1.27)..."
+              go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
             fi
           '';
         };
