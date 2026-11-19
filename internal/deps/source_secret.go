@@ -93,7 +93,19 @@ func teardownSecret(ctx context.Context, dep dsl.Dependency, restCfg *rest.Confi
 	if err != nil {
 		return fmt.Errorf("secret dep %q teardown: building clientset: %w", dep.Name, err)
 	}
-	err = clientset.CoreV1().Secrets(dep.Namespace).Delete(ctx, dep.Name, metav1.DeleteOptions{})
+	secrets := clientset.CoreV1().Secrets(dep.Namespace)
+	existing, err := secrets.Get(ctx, dep.Name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("secret dep %q teardown: %w", dep.Name, err)
+	}
+	if !managedByVigie(existing.Labels) {
+		slog.Debug("teardown: leaving a secret vigie did not create", "secret", dep.Name, "namespace", dep.Namespace)
+		return nil
+	}
+	err = secrets.Delete(ctx, dep.Name, metav1.DeleteOptions{})
 	if err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("secret dep %q teardown: %w", dep.Name, err)
 	}
@@ -191,6 +203,9 @@ func upsertSecret(ctx context.Context, clientset *kubernetes.Clientset, secret *
 		existing, getErr := secrets.Get(ctx, secret.Name, metav1.GetOptions{})
 		if getErr != nil {
 			return fmt.Errorf("getting existing secret: %w", getErr)
+		}
+		if !managedByVigie(existing.Labels) {
+			return errNotManaged("Secret", secret.Namespace, secret.Name)
 		}
 		existing.Data = secret.Data
 		existing.Type = secret.Type

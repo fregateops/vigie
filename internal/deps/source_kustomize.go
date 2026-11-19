@@ -21,7 +21,7 @@ func applyKustomize(ctx context.Context, dep dsl.Dependency, restCfg *rest.Confi
 	if err != nil {
 		return fmt.Errorf("dep %q: building kustomization: %w", dep.Name, err)
 	}
-	return applyRawDocs(ctx, dep.Name, raw, restCfg)
+	return applyRawDocs(ctx, dep, raw, restCfg)
 }
 
 // teardownKustomize removes resources that were applied by applyKustomize by
@@ -33,7 +33,7 @@ func teardownKustomize(ctx context.Context, dep dsl.Dependency, restCfg *rest.Co
 		slog.Debug("kustomize dep: rebuild failed during teardown, skipping", "dep", dep.Name, "err", err)
 		return nil
 	}
-	return teardownRawDocs(ctx, dep.Name, raw, restCfg)
+	return teardownRawDocs(ctx, dep, raw, restCfg)
 }
 
 // buildKustomization runs krusty.MakeKustomizer in-process and returns the

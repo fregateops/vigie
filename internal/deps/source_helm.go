@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"helm.sh/helm/v3/pkg/action"
 	helmchart "helm.sh/helm/v3/pkg/chart"
@@ -16,6 +17,10 @@ import (
 	"github.com/fregateops/vigie/internal/dsl"
 	"github.com/fregateops/vigie/internal/kubeclient"
 )
+
+// helmDepTimeout bounds how long a helm dependency's hooks may run; helm's
+// zero value would wait on a stuck hook Job forever.
+const helmDepTimeout = 5 * time.Minute
 
 // installHelm installs a Helm chart from a repository or local path using the
 // helm.sh/helm/v3 action API. It respects the dep's namespace and values overrides.
@@ -51,6 +56,7 @@ func installHelm(ctx context.Context, dep dsl.Dependency, restCfg *rest.Config, 
 	install.CreateNamespace = true
 	install.Wait = false
 	install.DisableHooks = false
+	install.Timeout = helmDepTimeout
 
 	vals := dep.Values
 	if vals == nil {
@@ -84,6 +90,7 @@ func teardownHelm(ctx context.Context, dep dsl.Dependency, restCfg *rest.Config)
 	uninstall := action.NewUninstall(cfg)
 	uninstall.Wait = false
 	uninstall.IgnoreNotFound = true
+	uninstall.Timeout = helmDepTimeout
 
 	_, err := uninstall.Run(dep.Name)
 	if err != nil {

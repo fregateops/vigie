@@ -7,11 +7,14 @@ import (
 	"log/slog"
 	"runtime"
 	"sync"
+	"time"
 
 	"k8s.io/client-go/rest"
 
 	"github.com/fregateops/vigie/internal/dsl"
 )
+
+const rollbackTimeout = 2 * time.Minute
 
 // InstallState holds the state of a completed Install call so that Teardown
 // can reverse it in the correct order.
@@ -65,7 +68,6 @@ func Install(ctx context.Context, deps []dsl.Dependency, restCfg *rest.Config, o
 	var (
 		installed []dsl.Dependency
 		exports   = ExportMap{}
-		mu        sync.Mutex
 	)
 
 	cache, cacheErr := NewCacheClient(restCfg)
@@ -77,15 +79,15 @@ func Install(ctx context.Context, deps []dsl.Dependency, restCfg *rest.Config, o
 	for batchIdx, batch := range batches {
 		slog.Debug("installing dep batch", "batch", batchIdx, "size", len(batch))
 		batchErrors := installBatch(ctx, batch, restCfg, cache, parallelism, opts.BaseDir)
-		for _, berr := range batchErrors {
-			if berr != nil {
-				return nil, nil, berr
+		for idx, berr := range batchErrors {
+			if berr == nil {
+				installed = append(installed, batch[idx])
 			}
 		}
-
-		mu.Lock()
-		installed = append(installed, batch...)
-		mu.Unlock()
+		if err := errors.Join(batchErrors...); err != nil {
+			rollback(&InstallState{Installed: installed, restCfg: restCfg, baseDir: opts.BaseDir})
+			return nil, nil, err
+		}
 
 		for _, dep := range batch {
 			collectExports(dep, exports)
@@ -99,6 +101,16 @@ func Install(ctx context.Context, deps []dsl.Dependency, restCfg *rest.Config, o
 		baseDir:   opts.BaseDir,
 	}
 	return state, exports, nil
+}
+
+// rollback tears down what a failed Install already installed, on a detached
+// context: the caller never receives that state, so nothing else could.
+func rollback(state *InstallState) {
+	ctx, cancel := context.WithTimeout(context.Background(), rollbackTimeout)
+	defer cancel()
+	if err := Teardown(ctx, state); err != nil {
+		slog.Warn("rolling back partially installed dependencies failed; some may remain", "err", err)
+	}
 }
 
 // Teardown removes all installed deps in reverse install order.
