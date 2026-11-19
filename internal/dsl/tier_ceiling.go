@@ -62,6 +62,28 @@ func (a Assertion) ReadsLiveState() bool {
 	return false
 }
 
+// wholeRenderMatchers judge the render as a whole (document count, render
+// error) rather than one selected document.
+var wholeRenderMatchers = []string{"hasDocuments", "failedTemplate"}
+
+// ReadsRenderedDocument reports whether an assertion evaluates against one
+// selected rendered document. Live matchers observe the cluster instead (a
+// lookup's nested asserts read the fetched object), and whole-render matchers
+// need no document, so neither needs a document selected for it.
+func (a Assertion) ReadsRenderedDocument() bool {
+	for _, child := range slices.Concat(a.AllOf, a.AnyOf) {
+		if child.ReadsRenderedDocument() {
+			return true
+		}
+	}
+	for _, m := range setMatchers(a) {
+		if !slices.Contains(wholeRenderMatchers, m) && slices.Equal(matcherCapabilities[m], []Capability{RenderedManifests}) {
+			return true
+		}
+	}
+	return false
+}
+
 // firstUnmetMatcher walks one assertion, recursing through composites and
 // lookup's nested assertions, and returns the first matcher whose capabilities
 // the tier does not provide.

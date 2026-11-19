@@ -66,59 +66,68 @@ func TestMatchesTarget(t *testing.T) {
 
 func TestSelectDoc(t *testing.T) {
 	docs := []map[string]any{deployDoc, svcDoc}
+	readsDoc := dsl.Assertion{Exists: &dsl.PathOnly{Path: "kind"}}
 
 	t.Run("no target, single doc", func(t *testing.T) {
-		doc, diag := selectDoc(dsl.Assertion{}, nil, []map[string]any{deployDoc}, nil)
+		doc, diag := selectDoc(readsDoc, nil, []map[string]any{deployDoc}, nil)
 		if doc == nil || diag != "" {
 			t.Fatalf("want deployDoc, no diag; got doc=%v diag=%q", doc, diag)
 		}
 	})
 
 	t.Run("no target, no docs", func(t *testing.T) {
-		doc, diag := selectDoc(dsl.Assertion{}, nil, nil, nil)
+		doc, diag := selectDoc(readsDoc, nil, nil, nil)
 		if doc != nil || diag == "" {
 			t.Fatalf("want nil doc + diagnostic; got doc=%v diag=%q", doc, diag)
 		}
 	})
 
 	t.Run("no target, several docs is ambiguous", func(t *testing.T) {
-		doc, diag := selectDoc(dsl.Assertion{}, nil, docs, nil)
+		doc, diag := selectDoc(readsDoc, nil, docs, nil)
 		if doc != nil || !strings.Contains(diag, "forEach") || !strings.Contains(diag, "Service/") {
 			t.Fatalf("want nil doc + diagnostic listing candidates and the fix; got doc=%v diag=%q", doc, diag)
 		}
 	})
 
+	t.Run("live matcher needs no document", func(t *testing.T) {
+		live := dsl.Assertion{Lookup: &dsl.LookupAssert{Kind: "Deployment", Name: "app"}}
+		doc, diag := selectDoc(live, nil, docs, nil)
+		if doc != nil || diag != "" {
+			t.Fatalf("want (nil, \"\") for a live matcher; got doc=%v diag=%q", doc, diag)
+		}
+	})
+
 	t.Run("target matching several docs is ambiguous", func(t *testing.T) {
 		svc2 := map[string]any{"kind": "Service", "metadata": map[string]any{"name": "other"}}
-		doc, diag := selectDoc(dsl.Assertion{}, &dsl.TargetSpec{Kind: "Service"}, []map[string]any{svcDoc, svc2}, nil)
+		doc, diag := selectDoc(readsDoc, &dsl.TargetSpec{Kind: "Service"}, []map[string]any{svcDoc, svc2}, nil)
 		if doc != nil || !strings.Contains(diag, "Service/other") {
 			t.Fatalf("want nil doc + diagnostic listing both Services; got doc=%v diag=%q", doc, diag)
 		}
 	})
 
 	t.Run("documentIndex in range", func(t *testing.T) {
-		doc, diag := selectDoc(dsl.Assertion{}, &dsl.TargetSpec{DocumentIndex: intPtr(1)}, docs, nil)
+		doc, diag := selectDoc(readsDoc, &dsl.TargetSpec{DocumentIndex: intPtr(1)}, docs, nil)
 		if diag != "" || doc["kind"] != "Service" {
 			t.Fatalf("want svcDoc, no diag; got doc=%v diag=%q", doc, diag)
 		}
 	})
 
 	t.Run("documentIndex out of range", func(t *testing.T) {
-		doc, diag := selectDoc(dsl.Assertion{}, &dsl.TargetSpec{DocumentIndex: intPtr(9)}, docs, nil)
+		doc, diag := selectDoc(readsDoc, &dsl.TargetSpec{DocumentIndex: intPtr(9)}, docs, nil)
 		if doc != nil || diag == "" {
 			t.Fatalf("want nil doc + out-of-range diagnostic; got doc=%v diag=%q", doc, diag)
 		}
 	})
 
 	t.Run("target selects single match", func(t *testing.T) {
-		doc, diag := selectDoc(dsl.Assertion{}, &dsl.TargetSpec{Kind: "Service"}, docs, nil)
+		doc, diag := selectDoc(readsDoc, &dsl.TargetSpec{Kind: "Service"}, docs, nil)
 		if diag != "" || doc["kind"] != "Service" {
 			t.Fatalf("want svcDoc, no diag; got doc=%v diag=%q", doc, diag)
 		}
 	})
 
 	t.Run("target matches nothing yields diagnostic", func(t *testing.T) {
-		doc, diag := selectDoc(dsl.Assertion{}, &dsl.TargetSpec{Kind: "ConfigMap"}, docs, nil)
+		doc, diag := selectDoc(readsDoc, &dsl.TargetSpec{Kind: "ConfigMap"}, docs, nil)
 		if doc != nil || diag == "" {
 			t.Fatalf("want nil doc + no-match diagnostic; got doc=%v diag=%q", doc, diag)
 		}
@@ -126,7 +135,7 @@ func TestSelectDoc(t *testing.T) {
 
 	t.Run("assertion On overrides suite target", func(t *testing.T) {
 		// suite target picks Deployment; per-assertion On picks Service.
-		doc, diag := selectDoc(dsl.Assertion{On: &dsl.TargetSpec{Kind: "Service"}}, &dsl.TargetSpec{Kind: "Deployment"}, docs, nil)
+		doc, diag := selectDoc(dsl.Assertion{Exists: readsDoc.Exists, On: &dsl.TargetSpec{Kind: "Service"}}, &dsl.TargetSpec{Kind: "Deployment"}, docs, nil)
 		if diag != "" || doc["kind"] != "Service" {
 			t.Fatalf("want On override to Service; got doc=%v diag=%q", doc, diag)
 		}

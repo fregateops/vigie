@@ -119,3 +119,24 @@ tests:
 		t.Errorf("error should not include the top-level rollup line; got:\n%s", msg)
 	}
 }
+
+func TestReadsRenderedDocument(t *testing.T) {
+	path := &PathValue{Path: "spec.replicas", Value: 3}
+	lookup := &LookupAssert{Kind: "Deployment", Name: "app", Then: []Assertion{{Equal: path}}}
+	count := 2
+	cases := []struct {
+		name string
+		a    Assertion
+		want bool
+	}{
+		{"path matcher", Assertion{Equal: path}, true},
+		{"whole-render matcher", Assertion{HasDocuments: &count}, false},
+		{"live matcher, nested asserts read the fetched object", Assertion{Lookup: lookup}, false},
+		{"composite with a path matcher", Assertion{AllOf: []Assertion{{Lookup: lookup}, {Equal: path}}}, true},
+	}
+	for _, tc := range cases {
+		if got := tc.a.ReadsRenderedDocument(); got != tc.want {
+			t.Errorf("%s: ReadsRenderedDocument() = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
