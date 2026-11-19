@@ -8,7 +8,6 @@ import (
 	"github.com/fregateops/vigie/internal/config"
 )
 
-// RenderFailedRuleID tags the finding raised when the chart does not render.
 const RenderFailedRuleID = "render-failed"
 
 // Result is the outcome of linting a single chart.
