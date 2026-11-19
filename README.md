@@ -437,7 +437,11 @@ chart. Global flags: `-o, --output pretty|json|junit|sarif|tap` · `-v` debug / 
 `-p, --parallelism` lives on `test` and `validate` (the commands that parallelize), not globally.
 
 Exit codes: `0` pass · `1` test failure · `2` setup error · `3` user error · `4` infra error ·
-`5` warnings (e.g. no tests executed; suppress with `--pass-on-warning`).
+`5` warnings (e.g. no tests executed; suppress with `--pass-on-warning`) · `130` interrupted.
+
+Ctrl-C or SIGTERM during a cluster run stops starting new tests, aborts in-flight waits, and
+still tears down namespaces, dependencies, and the throwaway cluster; a second Ctrl-C exits
+immediately.
 
 ---
 

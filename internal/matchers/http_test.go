@@ -1,12 +1,14 @@
 package matchers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/fregateops/vigie/internal/dsl"
 	corev1 "k8s.io/api/core/v1"
@@ -17,6 +19,7 @@ import (
 
 func httpCtx(inApplyTier bool) EvalContext {
 	return EvalContext{
+		Context:     context.Background(),
 		InApplyTier: inApplyTier,
 		RESTConfig:  &rest.Config{Host: "https://localhost:6443"},
 	}
@@ -774,5 +777,28 @@ func TestParseHTTPTimeout(t *testing.T) {
 		if dur.Seconds() != tt.wantSecs {
 			t.Errorf("parseHTTPTimeout(%q) = %v, want %vs", tt.input, dur, tt.wantSecs)
 		}
+	}
+}
+
+func TestEvalHTTP_RetriesStopWhenContextEnds(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	spec := &dsl.HTTPAssert{
+		Via:     "direct",
+		Target:  &dsl.HTTPTarget{URL: "http://127.0.0.1:9"},
+		Retries: &dsl.HTTPRetries{Count: 50, Interval: "1h"},
+		Assert:  &dsl.HTTPAssertBlock{Status: 200},
+	}
+	evalCtx := httpCtx(true)
+	evalCtx.Context = ctx
+	done := make(chan Result, 1)
+	go func() { done <- evalHTTP(spec, evalCtx) }()
+	select {
+	case r := <-done:
+		if r.Pass {
+			t.Fatal("want a failure once the context is cancelled")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("http retries kept waiting after the context was cancelled")
 	}
 }

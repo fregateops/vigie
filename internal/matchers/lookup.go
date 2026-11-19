@@ -51,7 +51,7 @@ func evalLookup(spec *dsl.LookupAssert, ctx EvalContext) Result {
 
 func evalLookupSingle(spec *dsl.LookupAssert, ctx EvalContext, dynClient dynamic.Interface, gvr schema.GroupVersionResource, within time.Duration) Result {
 	deadline := time.Now().Add(within)
-	pollCtx, cancelPoll := context.WithDeadline(context.Background(), deadline)
+	pollCtx, cancelPoll := context.WithDeadline(ctx.Context, deadline)
 	defer cancelPoll()
 
 	ns := resolveNS(spec.Namespace, ctx)
@@ -72,7 +72,9 @@ func evalLookupSingle(spec *dsl.LookupAssert, ctx EvalContext, dynClient dynamic
 				Message: fmt.Sprintf("lookup: timeout waiting for %s/%s until condition; last object: %v", spec.Kind, spec.Name, lastObj),
 			}
 		}
-		time.Sleep(pollInterval)
+		if !pause(pollCtx, pollInterval) {
+			break
+		}
 	}
 
 	return runThenAssertions(spec.Then, lastObj, ctx)
@@ -80,7 +82,7 @@ func evalLookupSingle(spec *dsl.LookupAssert, ctx EvalContext, dynClient dynamic
 
 func evalLookupList(spec *dsl.LookupAssert, ctx EvalContext, dynClient dynamic.Interface, gvr schema.GroupVersionResource, within time.Duration) Result {
 	deadline := time.Now().Add(within)
-	pollCtx, cancelPoll := context.WithDeadline(context.Background(), deadline)
+	pollCtx, cancelPoll := context.WithDeadline(ctx.Context, deadline)
 	defer cancelPoll()
 
 	ns := resolveNS(spec.Namespace, ctx)
@@ -105,7 +107,9 @@ func evalLookupList(spec *dsl.LookupAssert, ctx EvalContext, dynClient dynamic.I
 				Message: fmt.Sprintf("lookup: timeout: no %s resources found matching labelSelector %q", spec.Kind, spec.LabelSelector),
 			}
 		}
-		time.Sleep(pollInterval)
+		if !pause(pollCtx, pollInterval) {
+			break
+		}
 	}
 
 	for itemIdx, item := range items {

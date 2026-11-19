@@ -67,7 +67,7 @@ func evalWaitFor(spec *dsl.WaitForSpec, ctx EvalContext) Result {
 	}
 
 	deadline := time.Now().Add(setup.timeout)
-	pollCtx, cancelPoll := context.WithDeadline(context.Background(), deadline)
+	pollCtx, cancelPoll := context.WithDeadline(ctx.Context, deadline)
 	defer cancelPoll()
 
 	ns := resolveNS(spec.Namespace, ctx)
@@ -88,7 +88,9 @@ func evalWaitFor(spec *dsl.WaitForSpec, ctx EvalContext) Result {
 		if time.Now().After(deadline) {
 			break
 		}
-		time.Sleep(pollInterval)
+		if !pause(pollCtx, pollInterval) {
+			break
+		}
 	}
 
 	return Result{
@@ -104,7 +106,7 @@ func evalBecomesReady(spec *dsl.WaitForSpec, ctx EvalContext) Result {
 	}
 
 	deadline := time.Now().Add(setup.timeout)
-	pollCtx, cancelPoll := context.WithDeadline(context.Background(), deadline)
+	pollCtx, cancelPoll := context.WithDeadline(ctx.Context, deadline)
 	defer cancelPoll()
 
 	ns := resolveNS(spec.Namespace, ctx)
@@ -124,7 +126,9 @@ func evalBecomesReady(spec *dsl.WaitForSpec, ctx EvalContext) Result {
 		if time.Now().After(deadline) {
 			break
 		}
-		time.Sleep(pollInterval)
+		if !pause(pollCtx, pollInterval) {
+			break
+		}
 	}
 
 	return Result{
