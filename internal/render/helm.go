@@ -2,43 +2,67 @@ package render
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
-	"os"
+	"io"
+	"path"
 	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
+	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/engine"
-	"helm.sh/helm/v3/pkg/strvals"
+)
+
+const (
+	DefaultReleaseName = "release-name"
+	DefaultNamespace   = "default"
+	// DefaultRevision matches `helm template`, which renders as a first install.
+	DefaultRevision = 1
+	notesSuffix     = "/NOTES.txt"
 )
 
 // Request specifies what to render and with which inputs.
 type Request struct {
 	ChartPath string
-	// Values is applied with `helm --set` semantics: dotted keys are expanded
-	// into nested structure (e.g. `image.tag` → `{image: {tag: ...}}`).
-	Values map[string]any
-	// OverlayValues is a pre-parsed YAML overlay applied with `helm -f`
-	// semantics: deep-merged onto the chart's `values.yaml` before any --set
-	// overrides. Use this for full values files (e.g. `values-prod.yaml`).
-	OverlayValues map[string]any
-	ReleaseName   string
-	Namespace     string
-	KubeVersion   string
-	APIVersions   []string
-	// Templates limits rendering to these file names (relative to chart). Empty = all.
+	// Values are the user-supplied values (see BuildValues), coalesced onto the
+	// chart's values.yaml the way `helm install` does.
+	Values      map[string]any
+	ReleaseName string
+	Namespace   string
+	Revision    int
+	IsUpgrade   bool
+	KubeVersion string
+	APIVersions []string
+	// Templates limits rendering to these paths relative to the chart root
+	// (e.g. `templates/deployment.yaml`, `charts/sub/templates/*.yaml`).
+	// Glob patterns follow path.Match. Empty = all.
 	Templates []string
+}
+
+// Document is one rendered YAML document and the template that produced it.
+type Document struct {
+	// Source is the template path relative to the chart root.
+	Source string
+	Object map[string]any
 }
 
 // Result is the output of a render operation.
 type Result struct {
-	// Docs contains all rendered, non-empty YAML documents in order.
-	Docs []map[string]any
-	// Files maps template filename → rendered content (for diagnostics).
-	Files map[string]string
+	// Docs contains all rendered, non-empty YAML documents, ordered by source.
+	Docs []Document
+}
+
+// Objects returns the rendered objects without their sources.
+func (r *Result) Objects() []map[string]any {
+	objs := make([]map[string]any, len(r.Docs))
+	for i, d := range r.Docs {
+		objs[i] = d.Object
+	}
+	return objs
 }
 
 // Render loads a chart and renders it in-process using the Helm engine.
@@ -47,94 +71,94 @@ func Render(req Request) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading chart %s: %w", req.ChartPath, err)
 	}
+	return RenderChart(chrt, req)
+}
 
-	vals, err := buildValues(chrt, req.OverlayValues, req.Values)
+// RenderChart renders an already-loaded chart, resolving subchart
+// conditions/tags and checking declared dependencies exactly like `helm install`.
+func RenderChart(chrt *chart.Chart, req Request) (*Result, error) {
+	if chrt.Metadata.Dependencies != nil {
+		if err := action.CheckDependencies(chrt, chrt.Metadata.Dependencies); err != nil {
+			return nil, fmt.Errorf("%w (run `helm dependency build %s`)", err, req.ChartPath)
+		}
+	}
+	vals := req.Values
+	if vals == nil {
+		vals = map[string]any{}
+	}
+	if err := chartutil.ProcessDependenciesWithMerge(chrt, vals); err != nil {
+		return nil, fmt.Errorf("processing chart dependencies: %w", err)
+	}
+
+	caps, err := buildCapabilities(req.KubeVersion, req.APIVersions)
 	if err != nil {
 		return nil, err
 	}
-
-	caps := buildCapabilities(req.KubeVersion, req.APIVersions)
-
-	releaseMeta := chartutil.ReleaseOptions{
-		Name:      coalesce(req.ReleaseName, "release-name"),
-		Namespace: coalesce(req.Namespace, "default"),
-		IsInstall: true,
+	revision := req.Revision
+	if revision == 0 {
+		revision = DefaultRevision
 	}
-
+	releaseMeta := chartutil.ReleaseOptions{
+		Name:      coalesce(req.ReleaseName, DefaultReleaseName),
+		Namespace: coalesce(req.Namespace, DefaultNamespace),
+		Revision:  revision,
+		IsInstall: !req.IsUpgrade,
+		IsUpgrade: req.IsUpgrade,
+	}
 	renderVals, err := chartutil.ToRenderValues(chrt, vals, releaseMeta, caps)
 	if err != nil {
 		return nil, fmt.Errorf("building render values: %w", err)
 	}
 
-	eng := engine.Engine{}
-	rendered, err := eng.Render(chrt, renderVals)
+	rendered, err := engine.Render(chrt, renderVals)
 	if err != nil {
 		return nil, fmt.Errorf("rendering chart: %w", err)
 	}
 
-	result := &Result{Files: rendered, Docs: nil}
-
-	// Sort filenames for deterministic document order across runs.
-	filenames := make([]string, 0, len(rendered))
+	sources := make([]string, 0, len(rendered))
 	for f := range rendered {
-		filenames = append(filenames, f)
+		sources = append(sources, f)
 	}
-	sort.Strings(filenames)
+	sort.Strings(sources)
 
-	for _, filename := range filenames {
-		content := rendered[filename]
-		// Skip non-template files and NOTES.txt
-		if strings.HasSuffix(filename, "/NOTES.txt") {
+	result := &Result{}
+	chartPrefix := chrt.Name() + "/"
+	matched := make(map[string]bool, len(req.Templates))
+	for _, file := range sources {
+		if strings.HasSuffix(file, notesSuffix) {
 			continue
 		}
-		if len(req.Templates) > 0 && !matchesTemplate(filename, req.Templates) {
+		source := strings.TrimPrefix(file, chartPrefix)
+		if len(req.Templates) > 0 && !matchesTemplate(source, req.Templates, matched) {
 			continue
 		}
-		docs, err := parseYAMLDocs(content)
+		objs, err := parseYAMLDocs(rendered[file])
 		if err != nil {
-			return nil, fmt.Errorf("parsing rendered output of %s: %w", filename, err)
+			return nil, fmt.Errorf("parsing rendered output of %s: %w", source, err)
 		}
-		result.Docs = append(result.Docs, docs...)
+		for _, obj := range objs {
+			result.Docs = append(result.Docs, Document{Source: source, Object: obj})
+		}
 	}
-
+	for _, pattern := range req.Templates {
+		if !matched[pattern] {
+			return nil, fmt.Errorf("templates: %q matches no template in the chart (paths are relative to the chart root, e.g. templates/deployment.yaml)", pattern)
+		}
+	}
 	return result, nil
 }
 
-func buildValues(chrt *chart.Chart, overlay, sets map[string]any) (map[string]any, error) {
-	// Start from the overlay (deep-merged onto chart defaults later via
-	// chartutil.CoalesceValues). Copy so callers can reuse the input map.
-	expanded := map[string]any{}
-	for k, v := range overlay {
-		expanded[k] = v
-	}
-	// Apply --set style overrides on top: dotted keys expand into nested maps.
-	for k, v := range sets {
-		valStr := fmt.Sprintf("%v", v)
-		if err := strvals.ParseInto(k+"="+valStr, expanded); err != nil {
-			// Fall back to storing the key verbatim if strvals rejects it.
-			expanded[k] = v
-		}
-	}
-
-	merged, err := chartutil.CoalesceValues(chrt, expanded)
-	if err != nil {
-		return nil, fmt.Errorf("merging values: %w", err)
-	}
-	return merged.AsMap(), nil
-}
-
-func buildCapabilities(kubeVersion string, apiVersions []string) *chartutil.Capabilities {
+func buildCapabilities(kubeVersion string, apiVersions []string) (*chartutil.Capabilities, error) {
 	caps := chartutil.DefaultCapabilities.Copy()
 	if kubeVersion != "" {
 		kv, err := chartutil.ParseKubeVersion(kubeVersion)
-		if err == nil {
-			caps.KubeVersion = *kv
+		if err != nil {
+			return nil, fmt.Errorf("invalid kubeVersion %q: %w", kubeVersion, err)
 		}
+		caps.KubeVersion = *kv
 	}
-	if len(apiVersions) > 0 {
-		caps.APIVersions = append(caps.APIVersions, apiVersions...)
-	}
-	return caps
+	caps.APIVersions = append(caps.APIVersions, apiVersions...)
+	return caps, nil
 }
 
 func parseYAMLDocs(content string) ([]map[string]any, error) {
@@ -143,40 +167,29 @@ func parseYAMLDocs(content string) ([]map[string]any, error) {
 	for {
 		var doc map[string]any
 		err := decoder.Decode(&doc)
+		if errors.Is(err, io.EOF) {
+			return docs, nil
+		}
 		if err != nil {
-			break
+			return nil, err
 		}
 		if doc != nil {
 			docs = append(docs, doc)
 		}
 	}
-	return docs, nil
 }
 
-func matchesTemplate(filename string, templates []string) bool {
-	for _, tmpl := range templates {
-		if strings.HasSuffix(filename, tmpl) || strings.Contains(filename, tmpl) {
-			return true
+// matchesTemplate reports whether source matches any pattern, recording every
+// pattern that matched so unused ones can be reported as typos.
+func matchesTemplate(source string, patterns []string, matched map[string]bool) bool {
+	hit := false
+	for _, pattern := range patterns {
+		if ok, _ := path.Match(pattern, source); ok {
+			matched[pattern] = true
+			hit = true
 		}
 	}
-	return false
-}
-
-// LoadValuesFile reads a YAML values file and returns the parsed map. Use the
-// result as Request.OverlayValues for `helm -f`-style overlays.
-func LoadValuesFile(path string) (map[string]any, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading values file %s: %w", path, err)
-	}
-	var m map[string]any
-	if err := yaml.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("parsing values file %s: %w", path, err)
-	}
-	if m == nil {
-		m = map[string]any{}
-	}
-	return m, nil
+	return hit
 }
 
 func coalesce(a, b string) string {

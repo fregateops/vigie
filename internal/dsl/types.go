@@ -28,9 +28,6 @@ type Suite struct {
 	// Used for helper function tests (call:). Paths relative to chart root.
 	Helpers []string `yaml:"helpers" json:"helpers,omitempty"`
 
-	// Optional chart override for this suite.
-	Chart *ChartSpec `yaml:"chart" json:"chart,omitempty"`
-
 	// Default inputs applied to every test in this suite.
 	Defaults *Inputs `yaml:"defaults" json:"defaults,omitempty"`
 
@@ -47,27 +44,21 @@ type Suite struct {
 	Tests []Test `yaml:"tests" json:"tests"`
 }
 
-// ChartSpec optionally overrides the chart used by a suite.
-type ChartSpec struct {
-	// Path to the chart relative to the test file.
-	Path string `yaml:"path" json:"path,omitempty"`
-
-	// How to resolve chart dependencies before rendering.
-	Dependencies string `yaml:"dependencies" json:"dependencies,omitempty" jsonschema:"enum=build,enum=update,enum=skip"`
-}
-
 // Inputs is the set of value overrides and release/capabilities settings.
 type Inputs struct {
-	// Helm --set overrides (dotted key paths to scalar values).
+	// Helm --set overrides keyed by dotted path. Values keep their YAML type:
+	// lists and maps are set as-is, and a quoted "true" stays a string.
 	Set map[string]any `yaml:"set" json:"set,omitempty"`
 
-	// Helm --set-json overrides (dotted key paths to JSON-encoded values).
+	// Helm --set-json overrides keyed by dotted path: a string is parsed as JSON
+	// text, any other value is used as-is.
 	SetJSON map[string]any `yaml:"setJson" json:"setJson,omitempty"`
 
-	// Helm --set-literal overrides (dotted key paths to literal string values).
+	// Helm --set-literal overrides keyed by dotted path (no escaping or type coercion).
 	SetLiteral map[string]string `yaml:"setLiteral" json:"setLiteral,omitempty"`
 
-	// Extra values files to merge, relative to the chart root.
+	// Values files (helm -f), relative to the chart root, deep-merged in order
+	// before setJson, set and setLiteral.
 	Values []string `yaml:"values" json:"values,omitempty"`
 
 	// Release metadata overrides.
@@ -85,13 +76,11 @@ type ReleaseInputs struct {
 	// Release namespace passed to Helm.
 	Namespace string `yaml:"namespace" json:"namespace,omitempty"`
 
-	// Release revision number.
-	Revision int `yaml:"revision" json:"revision,omitempty"`
+	// .Release.Revision seen by templates. Default: 1, like helm template.
+	Revision int `yaml:"revision" json:"revision,omitempty" jsonschema:"minimum=1"`
 
-	// Whether to treat this as an install.
-	IsInstall bool `yaml:"isInstall" json:"isInstall,omitempty"`
-
-	// Whether to treat this as an upgrade.
+	// Render as an upgrade (.Release.IsUpgrade true, .Release.IsInstall false)
+	// instead of a first install. Template tier only.
 	IsUpgrade bool `yaml:"isUpgrade" json:"isUpgrade,omitempty"`
 }
 

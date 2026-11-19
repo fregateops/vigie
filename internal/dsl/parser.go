@@ -2,6 +2,7 @@ package dsl
 
 import (
 	"fmt"
+	"maps"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -32,7 +33,9 @@ func Parse(rawYAML []byte, sourcePath string) (*Suite, error) {
 	return &suite, nil
 }
 
-// MergeInputs merges suite-level defaults into each test where fields are unset.
+// MergeInputs merges suite-level defaults into each test: release, values files
+// and capabilities apply when the test leaves them unset, while set, setJson and
+// setLiteral merge key by key with the test's own keys winning.
 func MergeInputs(suite *Suite) {
 	if suite.Defaults == nil {
 		return
@@ -49,11 +52,20 @@ func MergeInputs(suite *Suite) {
 		if d.Values != nil && len(t.Inputs.Values) == 0 {
 			t.Inputs.Values = d.Values
 		}
-		if d.Set != nil && t.Inputs.Set == nil {
-			t.Inputs.Set = d.Set
-		}
+		t.Inputs.Set = mergeKeys(d.Set, t.Inputs.Set)
+		t.Inputs.SetJSON = mergeKeys(d.SetJSON, t.Inputs.SetJSON)
+		t.Inputs.SetLiteral = mergeKeys(d.SetLiteral, t.Inputs.SetLiteral)
 		if d.Capabilities != nil && t.Inputs.Capabilities == nil {
 			t.Inputs.Capabilities = d.Capabilities
 		}
 	}
+}
+
+func mergeKeys[V any](defaults, overrides map[string]V) map[string]V {
+	if defaults == nil {
+		return overrides
+	}
+	merged := maps.Clone(defaults)
+	maps.Copy(merged, overrides)
+	return merged
 }

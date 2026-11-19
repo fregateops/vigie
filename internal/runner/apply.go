@@ -17,7 +17,6 @@ import (
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
-	"helm.sh/helm/v3/pkg/strvals"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -400,10 +399,18 @@ func (r *applyRunner) runTest(ctx context.Context, et expandedTest, suite *dsl.S
 		}
 	}()
 
+	if test.Inputs != nil {
+		inputs := *test.Inputs
+		inputs.Set = applyDepsBindings(inputs.Set, mergedExports)
+		test.Inputs = &inputs
+	}
 	renderOpts := Options{ChartPath: r.opts.ChartPath, Cfg: r.opts.Cfg}
-	req := buildRenderRequest(test, suite, renderOpts)
+	req, err := buildRenderRequest(test, suite, renderOpts)
+	if err != nil {
+		tr.Failures = append(tr.Failures, fmt.Sprintf("        → %v", err))
+		return tr
+	}
 	req.Namespace = namespace
-	req.Values = applyDepsBindings(req.Values, mergedExports)
 
 	clog.Trace("apply render request",
 		"suite", suite.SuiteName, "test", et.DisplayName,
@@ -413,11 +420,11 @@ func (r *applyRunner) runTest(ctx context.Context, et expandedTest, suite *dsl.S
 
 	var allDocs []map[string]any
 	if renderResult != nil {
-		allDocs = renderResult.Docs
+		allDocs = renderResult.Objects()
 	}
 
 	releaseName := req.ReleaseName
-	vals := applyDepsBindings(buildValuesForInstall(test), mergedExports)
+	vals := req.Values
 
 	var installErr error
 	if renderErr == nil {
@@ -680,26 +687,6 @@ func substituteDepsString(input string, exports deps.ExportMap) string {
 		}
 		return val
 	})
-}
-
-// buildValuesForInstall mirrors the values-merge that buildRenderRequest
-// performs for the local-render path: dotted keys in Inputs.Set are expanded
-// into nested maps via strvals.ParseInto, the same way the Helm CLI does
-// when you pass `--set foo.bar=baz`. Without this, install.Run literally
-// stores Values["service.port"] and the chart template - which reads
-// .Values.service.port - silently falls back to chart defaults.
-func buildValuesForInstall(test dsl.Test) map[string]any {
-	vals := map[string]any{}
-	if test.Inputs == nil {
-		return vals
-	}
-	for k, v := range test.Inputs.Set {
-		valStr := fmt.Sprintf("%v", v)
-		if err := strvals.ParseInto(k+"="+valStr, vals); err != nil {
-			vals[k] = v
-		}
-	}
-	return vals
 }
 
 // allocateNamespace returns a DNS-label-safe namespace name unique to a test

@@ -95,7 +95,7 @@ func runValidateOverlay(opts ValidateOptions, overlayPath string, kubeVersions [
 		overlay = loaded
 	}
 
-	baseValues, err := buildBaseValues(opts)
+	values, err := applyCLISets(opts, overlay)
 	if err != nil {
 		return SuiteResult{Suite: suiteName, File: overlayPath, Duration: time.Since(suiteStart)}, err
 	}
@@ -108,12 +108,11 @@ func runValidateOverlay(opts ValidateOptions, overlayPath string, kubeVersions [
 		start := time.Now()
 
 		req := render.Request{
-			ChartPath:     opts.ChartPath,
-			Values:        baseValues,
-			OverlayValues: overlay,
+			ChartPath:   opts.ChartPath,
+			Values:      values,
 			ReleaseName:   opts.Cfg.Defaults.Release.Name,
-			Namespace:     opts.Cfg.Defaults.Release.Namespace,
-			KubeVersion:   kv,
+			Namespace:   opts.Cfg.Defaults.Release.Namespace,
+			KubeVersion: kv,
 		}
 		clog.Trace("validate render",
 			"chart", opts.ChartPath, "overlay", overlayPath, "kubeVersion", kv)
@@ -126,7 +125,7 @@ func runValidateOverlay(opts ValidateOptions, overlayPath string, kubeVersions [
 		}
 
 		sv := validators[kv]
-		schemaErrs, err := sv.Validate(result.Docs)
+		schemaErrs, err := sv.Validate(result.Objects())
 		if err != nil {
 			tr.Failures = append(tr.Failures, fmt.Sprintf("        schema validation error: %v", err))
 		}
@@ -149,16 +148,17 @@ func runValidateOverlay(opts ValidateOptions, overlayPath string, kubeVersions [
 	return sr, nil
 }
 
-func buildBaseValues(opts ValidateOptions) (map[string]any, error) {
-	base := map[string]any{}
-	for _, s := range opts.Set {
-		if err := strvals.ParseInto(s, base); err != nil {
-			return nil, fmt.Errorf("--set: %w", err)
-		}
-	}
+// applyCLISets layers the --set* flags onto the overlay, in helm's order.
+func applyCLISets(opts ValidateOptions, overlay map[string]any) (map[string]any, error) {
+	base := render.MergeValues(map[string]any{}, overlay)
 	for _, s := range opts.SetJSON {
 		if err := strvals.ParseJSON(s, base); err != nil {
 			return nil, fmt.Errorf("--set-json: %w", err)
+		}
+	}
+	for _, s := range opts.Set {
+		if err := strvals.ParseInto(s, base); err != nil {
+			return nil, fmt.Errorf("--set: %w", err)
 		}
 	}
 	for _, s := range opts.SetLiteral {
