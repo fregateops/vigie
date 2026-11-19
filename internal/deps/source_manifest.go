@@ -2,6 +2,7 @@ package deps
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -34,7 +35,7 @@ func applyManifest(ctx context.Context, dep dsl.Dependency, restCfg *rest.Config
 	if err != nil {
 		return fmt.Errorf("dep %q: reading manifest %q: %w", dep.Name, path, err)
 	}
-	return applyRawDocs(ctx, dep.Name, raw, restCfg)
+	return applyRawDocs(ctx, dep, raw, restCfg)
 }
 
 // teardownManifest deletes all resources previously applied by applyManifest.
@@ -45,12 +46,13 @@ func teardownManifest(ctx context.Context, dep dsl.Dependency, restCfg *rest.Con
 		slog.Debug("manifest dep: source file missing during teardown, skipping", "dep", dep.Name)
 		return nil
 	}
-	return teardownRawDocs(ctx, dep.Name, raw, restCfg)
+	return teardownRawDocs(ctx, dep, raw, restCfg)
 }
 
 // applyRawDocs parses a multi-document YAML byte slice, labels each resource,
 // and applies them via the dynamic client. Used by both manifest and kustomize sources.
-func applyRawDocs(ctx context.Context, depName string, raw []byte, restCfg *rest.Config) error {
+func applyRawDocs(ctx context.Context, dep dsl.Dependency, raw []byte, restCfg *rest.Config) error {
+	depName := dep.Name
 	docs, err := parseMultiDocYAML(raw)
 	if err != nil {
 		return fmt.Errorf("dep %q: parsing documents: %w", depName, err)
@@ -67,7 +69,7 @@ func applyRawDocs(ctx context.Context, depName string, raw []byte, restCfg *rest
 
 	for docIdx, doc := range docs {
 		labelResource(doc, depName)
-		if err := applyDoc(ctx, dynClient, mapper, doc); err != nil {
+		if err := applyDoc(ctx, dynClient, mapper, doc, dep.Namespace); err != nil {
 			return fmt.Errorf("dep %q: applying document %d: %w", depName, docIdx, err)
 		}
 	}
@@ -78,7 +80,8 @@ func applyRawDocs(ctx context.Context, depName string, raw []byte, restCfg *rest
 // teardownRawDocs parses a multi-document YAML byte slice and deletes each
 // resource via the dynamic client, logging individual delete failures rather
 // than aborting. Used by both manifest and kustomize sources.
-func teardownRawDocs(ctx context.Context, depName string, raw []byte, restCfg *rest.Config) error {
+func teardownRawDocs(ctx context.Context, dep dsl.Dependency, raw []byte, restCfg *rest.Config) error {
+	depName := dep.Name
 	docs, err := parseMultiDocYAML(raw)
 	if err != nil {
 		return fmt.Errorf("dep %q: parsing documents for teardown: %w", depName, err)
@@ -94,7 +97,7 @@ func teardownRawDocs(ctx context.Context, depName string, raw []byte, restCfg *r
 	}
 
 	for _, doc := range docs {
-		if err := deleteDoc(ctx, dynClient, mapper, doc); err != nil {
+		if err := deleteDoc(ctx, dynClient, mapper, doc, dep.Namespace); err != nil {
 			slog.Debug("teardown: delete failed (continuing)", "dep", depName, "err", err)
 		}
 	}
@@ -140,47 +143,47 @@ func labelResource(obj *unstructured.Unstructured, depName string) {
 	obj.SetAnnotations(annotations)
 }
 
-// applyDoc applies a single unstructured document using server-side create
-// with conflict resolution (update if already exists).
-func applyDoc(ctx context.Context, dynClient dynamic.Interface, mapper meta.RESTMapper, obj *unstructured.Unstructured) error {
-	gvr, ns, err := resolveGVR(mapper, obj)
+// applyDoc creates obj, or updates it when vigie created it earlier. An
+// object vigie did not create is refused: on a shared cluster it may be real,
+// and teardown would otherwise delete it (for a CRD, with every CR of its kind).
+func applyDoc(ctx context.Context, dynClient dynamic.Interface, mapper meta.RESTMapper, obj *unstructured.Unstructured, depNamespace string) error {
+	res, err := resourceFor(dynClient, mapper, obj, depNamespace)
 	if err != nil {
 		return err
 	}
-
-	var res dynamic.ResourceInterface
-	if ns != "" {
-		res = dynClient.Resource(gvr).Namespace(ns)
-	} else {
-		res = dynClient.Resource(gvr)
-	}
-
 	_, err = res.Create(ctx, obj, metav1.CreateOptions{})
-	if apierrors.IsAlreadyExists(err) {
-		existing, getErr := res.Get(ctx, obj.GetName(), metav1.GetOptions{})
-		if getErr != nil {
-			return fmt.Errorf("getting existing resource %s/%s: %w", obj.GetKind(), obj.GetName(), getErr)
-		}
-		obj.SetResourceVersion(existing.GetResourceVersion())
-		_, err = res.Update(ctx, obj, metav1.UpdateOptions{})
+	if !apierrors.IsAlreadyExists(err) {
+		return err
 	}
+	existing, err := res.Get(ctx, obj.GetName(), metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("getting existing resource %s/%s: %w", obj.GetKind(), obj.GetName(), err)
+	}
+	if !managedByVigie(existing.GetLabels()) {
+		return errNotManaged(obj.GetKind(), existing.GetNamespace(), obj.GetName())
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	_, err = res.Update(ctx, obj, metav1.UpdateOptions{})
 	return err
 }
 
-// deleteDoc deletes a single unstructured document.
-func deleteDoc(ctx context.Context, dynClient dynamic.Interface, mapper meta.RESTMapper, obj *unstructured.Unstructured) error {
-	gvr, ns, err := resolveGVR(mapper, obj)
+// deleteDoc deletes obj if vigie created it, and leaves anything else alone.
+func deleteDoc(ctx context.Context, dynClient dynamic.Interface, mapper meta.RESTMapper, obj *unstructured.Unstructured, depNamespace string) error {
+	res, err := resourceFor(dynClient, mapper, obj, depNamespace)
 	if err != nil {
 		return err
 	}
-
-	var res dynamic.ResourceInterface
-	if ns != "" {
-		res = dynClient.Resource(gvr).Namespace(ns)
-	} else {
-		res = dynClient.Resource(gvr)
+	existing, err := res.Get(ctx, obj.GetName(), metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return nil
 	}
-
+	if err != nil {
+		return err
+	}
+	if !managedByVigie(existing.GetLabels()) {
+		slog.Debug("teardown: leaving an object vigie did not create", "kind", obj.GetKind(), "name", obj.GetName())
+		return nil
+	}
 	err = res.Delete(ctx, obj.GetName(), metav1.DeleteOptions{})
 	if apierrors.IsNotFound(err) {
 		return nil
@@ -188,9 +191,38 @@ func deleteDoc(ctx context.Context, dynClient dynamic.Interface, mapper meta.RES
 	return err
 }
 
+func resourceFor(dynClient dynamic.Interface, mapper meta.RESTMapper, obj *unstructured.Unstructured, depNamespace string) (dynamic.ResourceInterface, error) {
+	gvr, ns, err := resolveGVR(mapper, obj, depNamespace)
+	if err != nil {
+		return nil, err
+	}
+	if ns == "" {
+		return dynClient.Resource(gvr), nil
+	}
+	return dynClient.Resource(gvr).Namespace(ns), nil
+}
+
+// managedByVigie reports whether an object carries the label vigie stamps on
+// everything a dependency creates.
+func managedByVigie(labels map[string]string) bool {
+	_, ok := labels[managedByLabel]
+	return ok
+}
+
+func errNotManaged(kind, namespace, name string) error {
+	ref := kind + "/" + name
+	if namespace != "" {
+		ref = kind + " " + namespace + "/" + name
+	}
+	return fmt.Errorf("%s already exists and was not created by vigie; refusing to modify it "+
+		"(on a shared cluster it may be in use: rename the dependency or remove the object)", ref)
+}
+
 // resolveGVR maps the object's GVK to a GroupVersionResource and returns its
-// namespace (empty for cluster-scoped resources).
-func resolveGVR(mapper meta.RESTMapper, obj *unstructured.Unstructured) (schema.GroupVersionResource, string, error) {
+// namespace (empty for cluster-scoped resources): the object's own, else the
+// dependency's (a test-scoped dependency targets the test's namespace), else
+// "default".
+func resolveGVR(mapper meta.RESTMapper, obj *unstructured.Unstructured, depNamespace string) (schema.GroupVersionResource, string, error) {
 	gvk := obj.GroupVersionKind()
 	mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	if err != nil {
@@ -199,10 +231,7 @@ func resolveGVR(mapper meta.RESTMapper, obj *unstructured.Unstructured) (schema.
 
 	ns := ""
 	if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
-		ns = obj.GetNamespace()
-		if ns == "" {
-			ns = "default"
-		}
+		ns = cmp.Or(obj.GetNamespace(), depNamespace, "default")
 	}
 	return mapping.Resource, ns, nil
 }
