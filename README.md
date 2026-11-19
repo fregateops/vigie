@@ -56,6 +56,13 @@ Chart hooks (e.g. a pre-install Job generating certificates) run and are waited 
 minutes, on `kind`, `k3d` and `kubeconfig`; `envtest` has no controllers to complete a hook Job,
 so it installs without hooks.
 
+Shell commands in test files (`beforeAll`/`afterAll`/`setup`/`teardown` hooks and secret
+`generate:`) run with a minimal environment: `PATH`, `HOME`, `USER`, `SHELL`, `TMPDIR`, locale
+and terminal variables, `KUBECONFIG` (pinned to the tested cluster) and `VIGIE_SUITE`,
+`VIGIE_TEST`, `VIGIE_NAMESPACE`. Anything else from vigie's own environment, such as a CI
+secret, must be named in the command's `passEnv:` list. On timeout or Ctrl-C the command's
+whole process group is killed.
+
 Backend-specific provisioning flags go through `test.cluster.<backend>.extraArgs` in
 `.vigie.yaml` (e.g. a kind `--config` for a multi-node topology). Downloaded binaries are statically-linked
 Go executables that run on NixOS as-is; a `nix profile install kind k3d` is picked up from

@@ -977,6 +977,13 @@
           "type": "object",
           "description": "Environment variables to set."
         },
+        "passEnv": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Names of vigie's own environment variables to pass through (e.g. a\nregistry token). The command otherwise sees only PATH, HOME, USER,\nSHELL, TMPDIR, locale and terminal variables, plus KUBECONFIG and the\nVIGIE_* variables, so CI secrets stay out unless named here. A listed\nvariable that is not set is an error."
+        },
         "timeout": {
           "type": "string",
           "description": "Maximum time to allow the command to run, as a Go duration."
