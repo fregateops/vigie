@@ -436,12 +436,19 @@ func (r *applyRunner) runTest(ctx context.Context, et expandedTest, suite *dsl.S
 		}
 	}
 
-	evaluateAssertions(ctx, &tr, et, suite, allDocs, renderErr, store, applyEvalExtras{
-		InApplyTier: true,
-		ApplyError:  installErr,
-		RESTConfig:  r.kubeCfg,
-		Namespace:   namespace,
-	})
+	// After an unexpected install failure the assertions have nothing to
+	// observe; evaluating them would only sit out every live matcher's timeout.
+	if installErr == nil || testExpectsRejection(test) {
+		evaluateAssertions(ctx, &tr, et, suite, allDocs, renderErr, store, applyEvalExtras{
+			InApplyTier: true,
+			ApplyError:  installErr,
+			RESTConfig:  r.kubeCfg,
+			Namespace:   namespace,
+		})
+	}
+	if len(tr.Failures) > 0 && renderErr == nil && ctx.Err() == nil {
+		tr.Failures = append(tr.Failures, namespaceDiagnostics(r.clientset, namespace)...)
+	}
 	tr.Pass = len(tr.Failures) == 0
 	return tr
 }
