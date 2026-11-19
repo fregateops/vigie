@@ -49,6 +49,9 @@ const clusterNone = "none"
 // dedicated "no tests collected" code.
 const exitWarnings = 5
 
+// exitInterrupted follows the shell convention for a SIGINT-terminated process.
+const exitInterrupted = 130
+
 var testCmd = &cobra.Command{
 	Use:   "test [chart]",
 	Short: "Render templates per test and run user assertions (optionally against a cluster)",
@@ -141,6 +144,9 @@ func runTestCmd(cmd *cobra.Command, args []string) error {
 		rep := selectReporter(flagOutput, os.Stdout, cienv.Detect())
 		if err := rep.Report(results); err != nil {
 			exitErr(2, "reporting: %v", err)
+		}
+		if cmd.Context().Err() != nil {
+			exitErr(exitInterrupted, "interrupted: tests not yet started were not run (cleanup completed)")
 		}
 
 		noteUncheckedKinds(results)

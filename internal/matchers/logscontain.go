@@ -48,7 +48,7 @@ func evalLogsContain(spec *dsl.LogsAssert, ctx EvalContext) Result {
 		return Result{Pass: false, Message: fmt.Sprintf("logsContain: invalid pattern %q: %v", spec.Pattern, err)}
 	}
 
-	deadline, cancel := context.WithTimeout(context.Background(), within)
+	deadline, cancel := context.WithTimeout(ctx.Context, within)
 	defer cancel()
 
 	pods, err := selectPods(deadline, ctx, clientset, spec.Pod)

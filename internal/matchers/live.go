@@ -25,6 +25,16 @@ const errApplyTierRequired = "apply-tier matchers are not valid in the unit test
 const defaultWaitTimeout = 2 * time.Minute
 const pollInterval = 2 * time.Second
 
+// pause waits d, or less when ctx ends first; it reports whether polling may go on.
+func pause(ctx context.Context, d time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(d):
+		return true
+	}
+}
+
 // clusterScopedResources lists resource names (plural) that are cluster-scoped
 // and must be fetched without a namespace prefix.
 var clusterScopedResources = map[string]bool{

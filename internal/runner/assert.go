@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -28,7 +29,7 @@ type applyEvalExtras struct {
 //
 // It does not set tr.Pass - callers decide that from len(tr.Failures) after
 // any tier-specific pre-checks (e.g. schema validation) have also run.
-func evaluateAssertions(tr *TestResult, et expandedTest, suite *dsl.Suite, allDocs []map[string]any, renderErr error, store *snapshot.Store, extras applyEvalExtras) {
+func evaluateAssertions(ctx context.Context, tr *TestResult, et expandedTest, suite *dsl.Suite, allDocs []map[string]any, renderErr error, store *snapshot.Store, extras applyEvalExtras) {
 	test := et.Test
 
 	for _, assertion := range test.Asserts {
@@ -46,6 +47,7 @@ func evaluateAssertions(tr *TestResult, et expandedTest, suite *dsl.Suite, allDo
 
 	evalContext := func(doc map[string]any, assertIdx int) matchers.EvalContext {
 		return matchers.EvalContext{
+			Context:       ctx,
 			Docs:          allDocs,
 			Doc:           doc,
 			RenderErr:     renderErr,

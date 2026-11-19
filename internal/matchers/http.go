@@ -44,7 +44,7 @@ func evalHTTP(spec *dsl.HTTPAssert, ctx EvalContext) Result {
 		return Result{Pass: false, Message: "http matcher: RESTConfig is required in apply tier context"}
 	}
 
-	targetURL, cleanup, err := resolveHTTPTargetURL(spec, ctx.RESTConfig, ctx.Namespace)
+	targetURL, cleanup, err := resolveHTTPTargetURL(ctx.Context, spec, ctx.RESTConfig, ctx.Namespace)
 	if err != nil {
 		return Result{Pass: false, Message: fmt.Sprintf("http matcher: resolve target: %v", err)}
 	}
@@ -68,11 +68,11 @@ func evalHTTP(spec *dsl.HTTPAssert, ctx EvalContext) Result {
 
 	var lastResult Result
 	for attempt := 0; attempt <= retryCount; attempt++ {
-		if attempt > 0 {
-			time.Sleep(retryInterval)
+		if attempt > 0 && !pause(ctx.Context, retryInterval) {
+			break
 		}
 
-		resp, body, reqErr := doHTTPRequest(reqURL, spec, timeout)
+		resp, body, reqErr := doHTTPRequest(ctx.Context, reqURL, spec, timeout)
 		if reqErr != nil {
 			lastResult = Result{Pass: false, Message: fmt.Sprintf("http matcher: request error: %v", reqErr)}
 			continue
@@ -105,7 +105,7 @@ func evalHTTP(spec *dsl.HTTPAssert, ctx EvalContext) Result {
 // function (for portforward teardown). fallbackNS is the per-test namespace
 // used when the spec doesn't pin one - the apply-tier runner allocates a
 // fresh namespace per test and passes it through EvalContext.Namespace.
-func resolveHTTPTargetURL(spec *dsl.HTTPAssert, restCfg *rest.Config, fallbackNS string) (string, func(), error) {
+func resolveHTTPTargetURL(ctx context.Context, spec *dsl.HTTPAssert, restCfg *rest.Config, fallbackNS string) (string, func(), error) {
 	via := spec.Via
 	if via == "" {
 		via = "portforward"
@@ -113,13 +113,13 @@ func resolveHTTPTargetURL(spec *dsl.HTTPAssert, restCfg *rest.Config, fallbackNS
 
 	switch via {
 	case "portforward":
-		return resolveViaPortForward(spec, restCfg, fallbackNS)
+		return resolveViaPortForward(ctx, spec, restCfg, fallbackNS)
 	case "direct":
 		return resolveViaDirect(spec)
 	case "ingress":
-		return resolveViaIngress(spec, restCfg, fallbackNS)
+		return resolveViaIngress(ctx, spec, restCfg, fallbackNS)
 	case "nodeport":
-		return resolveViaNodePort(spec, restCfg, fallbackNS)
+		return resolveViaNodePort(ctx, spec, restCfg, fallbackNS)
 	default:
 		return "", nil, fmt.Errorf("unknown routing mode %q (supported: portforward, direct, ingress, nodeport)", via)
 	}
@@ -139,7 +139,7 @@ func resolveViaDirect(spec *dsl.HTTPAssert) (string, func(), error) {
 //
 // For simulated backends (kwok), no real load-balancer provisions IPs, so the
 // function falls back to the first Node's internal IP and emits a warning.
-func resolveViaIngress(spec *dsl.HTTPAssert, restCfg *rest.Config, fallbackNS string) (string, func(), error) {
+func resolveViaIngress(ctx context.Context, spec *dsl.HTTPAssert, restCfg *rest.Config, fallbackNS string) (string, func(), error) {
 	if spec.Target == nil || spec.Target.Name == "" {
 		return "", nil, fmt.Errorf("ingress mode requires target.name to be set")
 	}
@@ -160,12 +160,12 @@ func resolveViaIngress(spec *dsl.HTTPAssert, restCfg *rest.Config, fallbackNS st
 		pollTimeout = 5 * time.Second
 	}
 
-	ingress, err := waitForIngressAddress(clientset, namespace, spec.Target.Name, pollTimeout)
+	ingress, err := waitForIngressAddress(ctx, clientset, namespace, spec.Target.Name, pollTimeout)
 	if err != nil {
 		return "", nil, err
 	}
 
-	address, usedFallback, err := resolveIngressAddress(clientset, ingress)
+	address, usedFallback, err := resolveIngressAddress(ctx, clientset, ingress)
 	if err != nil {
 		return "", nil, err
 	}
@@ -187,8 +187,8 @@ func resolveViaIngress(spec *dsl.HTTPAssert, restCfg *rest.Config, fallbackNS st
 
 // waitForIngressAddress polls until the named Ingress has a LoadBalancer
 // address or the timeout elapses.
-func waitForIngressAddress(clientset *kubernetes.Clientset, namespace, name string, timeout time.Duration) (*networkingv1.Ingress, error) {
-	pollCtx, cancel := context.WithTimeout(context.Background(), timeout)
+func waitForIngressAddress(parent context.Context, clientset *kubernetes.Clientset, namespace, name string, timeout time.Duration) (*networkingv1.Ingress, error) {
+	pollCtx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
 	var ingress *networkingv1.Ingress
@@ -213,7 +213,7 @@ func waitForIngressAddress(clientset *kubernetes.Clientset, namespace, name stri
 // resolveIngressAddress extracts the IP or hostname from the Ingress status.
 // When neither is set but the cluster has Nodes (simulated backend), it falls
 // back to the first Node's InternalIP and returns usedFallback=true.
-func resolveIngressAddress(clientset *kubernetes.Clientset, ingress *networkingv1.Ingress) (address string, usedFallback bool, err error) {
+func resolveIngressAddress(ctx context.Context, clientset *kubernetes.Clientset, ingress *networkingv1.Ingress) (address string, usedFallback bool, err error) {
 	if len(ingress.Status.LoadBalancer.Ingress) > 0 {
 		lb := ingress.Status.LoadBalancer.Ingress[0]
 		if lb.IP != "" {
@@ -225,7 +225,7 @@ func resolveIngressAddress(clientset *kubernetes.Clientset, ingress *networkingv
 	}
 
 	// Simulated-backend fallback: use a Node's InternalIP.
-	nodeIP, nodeErr := firstNodeInternalIP(clientset)
+	nodeIP, nodeErr := firstNodeInternalIP(ctx, clientset)
 	if nodeErr != nil {
 		return "", false, fmt.Errorf("no ingress IP/hostname and could not find node IP: %w", nodeErr)
 	}
@@ -233,8 +233,8 @@ func resolveIngressAddress(clientset *kubernetes.Clientset, ingress *networkingv
 }
 
 // firstNodeInternalIP returns the InternalIP of the first Ready node found.
-func firstNodeInternalIP(clientset *kubernetes.Clientset) (string, error) {
-	nodes, err := clientset.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+func firstNodeInternalIP(ctx context.Context, clientset *kubernetes.Clientset) (string, error) {
+	nodes, err := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return "", fmt.Errorf("list nodes: %w", err)
 	}
@@ -295,7 +295,7 @@ func resolveTargetNamespace(targetNS, fallbackNS string) string {
 	return "default"
 }
 
-func resolveViaNodePort(spec *dsl.HTTPAssert, restCfg *rest.Config, fallbackNS string) (string, func(), error) {
+func resolveViaNodePort(ctx context.Context, spec *dsl.HTTPAssert, restCfg *rest.Config, fallbackNS string) (string, func(), error) {
 	if spec.Target == nil {
 		return "", nil, fmt.Errorf("nodeport mode requires target to be set")
 	}
@@ -311,7 +311,7 @@ func resolveViaNodePort(spec *dsl.HTTPAssert, restCfg *rest.Config, fallbackNS s
 		namespace = "default"
 	}
 
-	resolveCtx, resolveCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	resolveCtx, resolveCancel := context.WithTimeout(ctx, 30*time.Second)
 	defer resolveCancel()
 
 	clientset, err := kubernetes.NewForConfig(restCfg)
@@ -430,7 +430,7 @@ func isNodeReady(node *corev1.Node) bool {
 	return false
 }
 
-func resolveViaPortForward(spec *dsl.HTTPAssert, restCfg *rest.Config, fallbackNS string) (string, func(), error) {
+func resolveViaPortForward(ctx context.Context, spec *dsl.HTTPAssert, restCfg *rest.Config, fallbackNS string) (string, func(), error) {
 	if spec.Target == nil {
 		return "", nil, fmt.Errorf("portforward mode requires target to be set")
 	}
@@ -441,7 +441,7 @@ func resolveViaPortForward(spec *dsl.HTTPAssert, restCfg *rest.Config, fallbackN
 		return "", nil, fmt.Errorf("portforward mode requires target.port to be set")
 	}
 
-	resolveCtx, resolveCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	resolveCtx, resolveCancel := context.WithTimeout(ctx, 30*time.Second)
 	defer resolveCancel()
 
 	podName, namespace, err := resolvePodForTarget(resolveCtx, spec.Target, restCfg, fallbackNS)
@@ -611,7 +611,7 @@ func parseHTTPRetries(retries *dsl.HTTPRetries) (count int, interval time.Durati
 	return count, interval, until, nil
 }
 
-func doHTTPRequest(targetURL string, spec *dsl.HTTPAssert, timeout time.Duration) (*http.Response, string, error) {
+func doHTTPRequest(ctx context.Context, targetURL string, spec *dsl.HTTPAssert, timeout time.Duration) (*http.Response, string, error) {
 	method := spec.Method
 	if method == "" {
 		method = http.MethodGet
@@ -626,7 +626,7 @@ func doHTTPRequest(targetURL string, spec *dsl.HTTPAssert, timeout time.Duration
 		bodyReader = bytes.NewReader(bodyBytes)
 	}
 
-	req, err := http.NewRequest(method, targetURL, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, method, targetURL, bodyReader)
 	if err != nil {
 		return nil, "", fmt.Errorf("create request: %w", err)
 	}

@@ -275,6 +275,10 @@ func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult
 		suite.SuiteName, len(expanded), len(suiteDeps), len(testDeps))
 
 	for _, et := range expanded {
+		if ctx.Err() != nil {
+			slog.Debug("apply: run cancelled, not starting remaining tests", "file", filePath)
+			break
+		}
 		if r.matchRE != nil && !r.matchRE.MatchString(et.DisplayName) {
 			slog.Debug("skipping test (no match)", "test", et.DisplayName)
 			continue
@@ -420,7 +424,7 @@ func (r *applyRunner) runTest(ctx context.Context, et expandedTest, suite *dsl.S
 		}
 	}
 
-	evaluateAssertions(&tr, et, suite, allDocs, renderErr, store, applyEvalExtras{
+	evaluateAssertions(ctx, &tr, et, suite, allDocs, renderErr, store, applyEvalExtras{
 		InApplyTier: true,
 		ApplyError:  installErr,
 		RESTConfig:  r.kubeCfg,

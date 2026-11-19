@@ -1,6 +1,7 @@
 package matchers
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strings"
@@ -50,6 +51,9 @@ type EvalContext struct {
 	// RESTConfig is the Kubernetes REST client config used by apply-tier matchers.
 	// Must be non-nil when InApplyTier is true and live-cluster matchers are used.
 	RESTConfig *rest.Config
+	// Context bounds live matchers' polling, so an interrupted or fail-fast
+	// run stops waiting instead of sitting out every timeout.
+	Context context.Context
 	// Namespace is the per-test namespace the chart was installed into.
 	// Live-cluster matchers (waitFor, becomesReady, lookup, logsContain,
 	// eventEmitted, http) fall back to this when their spec doesn't pin one,

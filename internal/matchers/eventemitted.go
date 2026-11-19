@@ -38,7 +38,7 @@ func evalEventEmitted(spec *dsl.EventAssert, ctx EvalContext) Result {
 
 	namespace := resolveNS(spec.InvolvedObject.Namespace, ctx)
 	deadline := time.Now().Add(within)
-	pollCtx, cancelPoll := context.WithDeadline(context.Background(), deadline)
+	pollCtx, cancelPoll := context.WithDeadline(ctx.Context, deadline)
 	defer cancelPoll()
 
 	for {
@@ -53,7 +53,9 @@ func evalEventEmitted(spec *dsl.EventAssert, ctx EvalContext) Result {
 		if time.Now().After(deadline) {
 			break
 		}
-		time.Sleep(pollInterval)
+		if !pause(pollCtx, pollInterval) {
+			break
+		}
 	}
 
 	return Result{
