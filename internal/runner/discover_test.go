@@ -44,10 +44,10 @@ tests:
 `
 )
 
-func TestDiscoverTestFiles_DefaultRoot_SkipsWhatCannotRunAtTemplate(t *testing.T) {
+func TestDiscoverTestFiles_DefaultRoot_KeepsEveryTier(t *testing.T) {
 	chart := t.TempDir()
 	unitPath := writeFile(t, chart, "tests/unit/deployment_test.yaml", unitSuiteYAML)
-	writeFile(t, chart, "tests/integration/e2e_test.yaml", integrationSuiteYAML)
+	e2ePath := writeFile(t, chart, "tests/integration/e2e_test.yaml", integrationSuiteYAML)
 	// Sibling non-test files and snapshots must be ignored.
 	writeFile(t, chart, "tests/fixtures/values.yaml", "key: value\n")
 	writeFile(t, chart, "tests/snapshots/foo.snap.yaml", "k: v\n")
@@ -56,7 +56,7 @@ func TestDiscoverTestFiles_DefaultRoot_SkipsWhatCannotRunAtTemplate(t *testing.T
 	if err != nil {
 		t.Fatalf("DiscoverTestFiles: %v", err)
 	}
-	want := []string{unitPath}
+	want := []string{e2ePath, unitPath}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("DiscoverTestFiles default root: want %v, got %v", want, got)
 	}

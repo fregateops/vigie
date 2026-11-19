@@ -225,18 +225,7 @@ func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult
 	if skip, reason := integrationFeatureSkip(suite, r.activeTier); skip {
 		slog.Debug("skipping suite (integration features unsupported)",
 			"file", filePath, "backend", r.opts.BackendType, "reason", reason)
-		for _, et := range expanded {
-			if r.matchRE != nil && !r.matchRE.MatchString(et.DisplayName) {
-				continue
-			}
-			sr.Results = append(sr.Results, TestResult{
-				SuiteName:  suite.SuiteName,
-				TestName:   et.DisplayName,
-				Pass:       true,
-				Skipped:    true,
-				SkipReason: reason,
-			})
-		}
+		sr.Results = skippedSuite(suite, expanded, r.matchRE, reason)
 		sr.Duration = time.Since(start)
 		return sr, nil
 	}
@@ -533,14 +522,6 @@ func backendTier(backendType string) string {
 	default:
 		return "e2e"
 	}
-}
-
-// DiscoverApplyTestFiles walks the configured tests directory recursively and
-// returns every `*_test.yaml` file regardless of suite shape (unit vs.
-// integration). The runner branches on shape per-file at parse time - the
-// caller no longer needs a `unit/` vs `integration/` split.
-func DiscoverApplyTestFiles(chartPath, testsDir string) ([]string, error) {
-	return discoverTestFiles(chartPath, testsDir, "")
 }
 
 // testExpectsRejection reports whether any assertion (including those nested

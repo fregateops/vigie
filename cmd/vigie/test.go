@@ -188,16 +188,11 @@ func refuseUnrunnableFile() {
 	}
 }
 
-// discoverTests resolves the test-file list for the active tier. A single
-// --file short-circuits discovery; otherwise the apply tier accepts both unit
-// and integration suite shapes (DiscoverApplyTestFiles) while the template tier
-// takes unit files only.
+// discoverTests resolves the test-file list: a single --file short-circuits
+// discovery of every test file under the tests root.
 func discoverTests(chartPath, testsDir string) ([]string, error) {
 	if flagTestFile != "" {
 		return []string{flagTestFile}, nil
-	}
-	if flagTestCluster != clusterNone {
-		return runner.DiscoverApplyTestFiles(chartPath, testsDir)
 	}
 	return runner.DiscoverTestFiles(chartPath, testsDir)
 }

@@ -31,7 +31,7 @@ func runApplySuite(t *testing.T, chartPath string) []runner.SuiteResult {
 	if err != nil {
 		t.Fatalf("config.Load(%s): %v", chartPath, err)
 	}
-	files, err := runner.DiscoverApplyTestFiles(chartPath, "")
+	files, err := runner.DiscoverTestFiles(chartPath, "")
 	if err != nil {
 		t.Fatalf("DiscoverApplyTestFiles(%s): %v", chartPath, err)
 	}
