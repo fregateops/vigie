@@ -585,13 +585,13 @@ func selectDoc(a dsl.Assertion, target *dsl.TargetSpec, docs []map[string]any, r
 	}
 
 	if effective == nil {
-		if len(docs) == 1 {
+		switch len(docs) {
+		case 0:
+			return nil, "        (no documents were rendered)"
+		case 1:
 			return docs[0], ""
 		}
-		if len(docs) == 0 {
-			return nil, "        (no documents were rendered)"
-		}
-		return docs[0], ""
+		return nil, ambiguousSelection("no target is set", docs)
 	}
 
 	if effective.DocumentIndex != nil {
@@ -602,19 +602,33 @@ func selectDoc(a dsl.Assertion, target *dsl.TargetSpec, docs []map[string]any, r
 		return docs[idx], ""
 	}
 
-	var matches []map[string]any
-	for _, doc := range docs {
-		if matchesTarget(doc, effective) {
-			matches = append(matches, doc)
-		}
-	}
-	if len(matches) == 1 {
+	matches := selectAllDocs(effective, docs)
+	switch len(matches) {
+	case 0:
+		return nil, buildTargetDiagnostic(effective, docs)
+	case 1:
 		return matches[0], ""
 	}
-	if len(matches) == 0 {
-		return nil, buildTargetDiagnostic(effective, docs)
+	return nil, ambiguousSelection("the target matches several", matches)
+}
+
+// ambiguousSelection explains why a single-document assertion has no single
+// document to run against, listing the candidates and the two ways out.
+func ambiguousSelection(why string, candidates []map[string]any) string {
+	return fmt.Sprintf("        (%s and %d documents are candidates:%s — narrow it with target:/on: or set forEach: true to assert on each)",
+		why, len(candidates), docList(candidates))
+}
+
+func docList(docs []map[string]any) string {
+	var b strings.Builder
+	for _, doc := range docs {
+		name := ""
+		if meta, ok := doc["metadata"].(map[string]any); ok {
+			name = fmt.Sprintf("%v", meta["name"])
+		}
+		fmt.Fprintf(&b, " %v/%s", doc["kind"], name)
 	}
-	return matches[0], ""
+	return b.String()
 }
 
 func matchesTarget(doc map[string]any, target *dsl.TargetSpec) bool {
@@ -677,17 +691,7 @@ func buildTargetDiagnostic(target *dsl.TargetSpec, docs []map[string]any) string
 	if target == nil {
 		return "        (no documents were rendered)"
 	}
-	msg := fmt.Sprintf("        (no document matched kind=%q name=%q — rendered:", target.Kind, target.Name)
-	for _, doc := range docs {
-		kind := fmt.Sprintf("%v", doc["kind"])
-		name := ""
-		if meta, ok := doc["metadata"].(map[string]any); ok {
-			name = fmt.Sprintf("%v", meta["name"])
-		}
-		msg += fmt.Sprintf(" %s/%s", kind, name)
-	}
-	msg += ")"
-	return msg
+	return fmt.Sprintf("        (no document matched kind=%q name=%q — rendered:%s)", target.Kind, target.Name, docList(docs))
 }
 
 // skipDecision reports whether the test should be skipped, and the reason
