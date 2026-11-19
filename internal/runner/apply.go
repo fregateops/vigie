@@ -59,6 +59,10 @@ type ApplyOptions struct {
 	// FailFast cancels queued tests after the first test failure. In-flight
 	// tests run to completion and clean up.
 	FailFast bool
+	// Images are local container images loaded into the cluster's nodes before
+	// any test runs (kind/k3d), so a chart can be tested against an image the
+	// CI job just built without pushing it to a registry.
+	Images []string
 	// KeepCluster preserves the cluster after the run for manual debugging.
 	// Honoured by node-backed backends; envtest tears down regardless.
 	KeepCluster bool
@@ -93,6 +97,13 @@ func RunApply(ctx context.Context, opts ApplyOptions) ([]SuiteResult, error) {
 		return nil, fmt.Errorf("setup error: starting %s backend: %w", opts.BackendType, err)
 	}
 	defer stopBackend(opts)
+
+	if len(opts.Images) > 0 {
+		clog.Progress("apply: loading %d image(s) into the cluster: %s", len(opts.Images), strings.Join(opts.Images, ", "))
+		if err := opts.Backend.LoadImages(ctx, opts.Images); err != nil {
+			return nil, fmt.Errorf("setup error: loading images: %w", err)
+		}
+	}
 
 	restCfg := opts.Backend.RESTConfig()
 	if restCfg == nil {
