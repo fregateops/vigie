@@ -126,6 +126,7 @@ func runValidateCmd(cmd *cobra.Command, args []string) error {
 		exitErr(2, "reporting: %v", err)
 	}
 
+	noteUncheckedKinds(results)
 	if runner.AnyFailed(results) {
 		os.Exit(1)
 	}

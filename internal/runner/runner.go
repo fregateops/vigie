@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -40,6 +41,9 @@ type TestResult struct {
 	// evaluation: a forEach test evaluates each assertion once per document.
 	LiveAsserts     int
 	RenderedAsserts int
+	// UncheckedKinds are rendered kinds no schema location covered, so they
+	// passed the kubeconform pass unchecked.
+	UncheckedKinds []string
 }
 
 // SuiteResult groups results from one test file.
@@ -73,6 +77,28 @@ type Options struct {
 type versionedValidator struct {
 	version string
 	sv      *render.SchemaValidator
+}
+
+func schemaOptions(cfg config.SchemasConfig, chartPath, kubeVersion string) render.SchemaOptions {
+	return render.SchemaOptions{
+		KubeVersion:        kubeVersion,
+		Locations:          cfg.Locations,
+		BaseDir:            chartPath,
+		AllowUnknownFields: cfg.AllowUnknownFields,
+	}
+}
+
+// UncheckedKinds returns, sorted and deduplicated, every kind the run's
+// kubeconform pass had no schema for.
+func UncheckedKinds(results []SuiteResult) []string {
+	var kinds []string
+	for _, sr := range results {
+		for _, tr := range sr.Results {
+			kinds = append(kinds, tr.UncheckedKinds...)
+		}
+	}
+	slices.Sort(kinds)
+	return slices.Compact(kinds)
 }
 
 // resolveSnapshotDir returns the snapshot directory: the explicit override
@@ -110,7 +136,7 @@ func Run(opts Options) ([]SuiteResult, error) {
 			if kubeVer == "" {
 				kubeVer = config.DefaultKubeVersion
 			}
-			sv, err := render.NewSchemaValidator(kubeVer)
+			sv, err := render.NewSchemaValidator(schemaOptions(opts.Cfg.Schemas, opts.ChartPath, kubeVer))
 			if err != nil {
 				return nil, fmt.Errorf("setup error: %w", err)
 			}
@@ -365,13 +391,14 @@ func runTest(et expandedTest, suite *dsl.Suite, opts Options, store *snapshot.St
 	// version so a matrix run points at the offending target.
 	if renderErr == nil && len(allDocs) > 0 {
 		for _, vv := range validators {
-			schemaErrs, err := vv.sv.Validate(allDocs)
+			report, err := vv.sv.Validate(allDocs)
 			if err != nil {
 				tr.Failures = append(tr.Failures, fmt.Sprintf("        schema[k8s %s] validation error: %v", vv.version, err))
 			}
-			for _, se := range schemaErrs {
+			for _, se := range report.Errors {
 				tr.Failures = append(tr.Failures, fmt.Sprintf("        schema[k8s %s]: %s/%s: %s", vv.version, se.Kind, se.Name, se.Message))
 			}
+			tr.UncheckedKinds = append(tr.UncheckedKinds, report.UncheckedKinds...)
 		}
 	}
 
