@@ -43,15 +43,10 @@ func (a *Adapter) PrepareContext(chartPath string, cfg *config.LintConfig) (lint
 
 	kubeVer := firstNonEmpty(cfg.KubeVersions)
 
-	res, _ := render.Render(render.Request{
-		ChartPath:   chartPath,
-		ReleaseName: "release-name",
-		Namespace:   "default",
-		KubeVersion: kubeVer,
-	})
+	res, _ := render.Render(render.Request{ChartPath: chartPath, KubeVersion: kubeVer})
 	var docs []map[string]any
 	if res != nil {
-		docs = res.Docs
+		docs = res.Objects()
 	}
 
 	return lint.Context{

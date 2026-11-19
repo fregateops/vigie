@@ -322,26 +322,6 @@
       "type": "object",
       "description": "CapabilityInputs overrides Kubernetes API capabilities visible to templates."
     },
-    "ChartSpec": {
-      "properties": {
-        "path": {
-          "type": "string",
-          "description": "Path to the chart relative to the test file."
-        },
-        "dependencies": {
-          "type": "string",
-          "enum": [
-            "build",
-            "update",
-            "skip"
-          ],
-          "description": "How to resolve chart dependencies before rendering."
-        }
-      },
-      "additionalProperties": false,
-      "type": "object",
-      "description": "ChartSpec optionally overrides the chart used by a suite."
-    },
     "Dependency": {
       "properties": {
         "name": {
@@ -647,25 +627,25 @@
       "properties": {
         "set": {
           "type": "object",
-          "description": "Helm --set overrides (dotted key paths to scalar values)."
+          "description": "Helm --set overrides keyed by dotted path. Values keep their YAML type:\nlists and maps are set as-is, and a quoted \"true\" stays a string."
         },
         "setJson": {
           "type": "object",
-          "description": "Helm --set-json overrides (dotted key paths to JSON-encoded values)."
+          "description": "Helm --set-json overrides keyed by dotted path: a string is parsed as JSON\ntext, any other value is used as-is."
         },
         "setLiteral": {
           "additionalProperties": {
             "type": "string"
           },
           "type": "object",
-          "description": "Helm --set-literal overrides (dotted key paths to literal string values)."
+          "description": "Helm --set-literal overrides keyed by dotted path (no escaping or type coercion)."
         },
         "values": {
           "items": {
             "type": "string"
           },
           "type": "array",
-          "description": "Extra values files to merge, relative to the chart root."
+          "description": "Values files (helm -f), relative to the chart root, deep-merged in order\nbefore setJson, set and setLiteral."
         },
         "release": {
           "$ref": "#/$defs/ReleaseInputs",
@@ -919,15 +899,12 @@
         },
         "revision": {
           "type": "integer",
-          "description": "Release revision number."
-        },
-        "isInstall": {
-          "type": "boolean",
-          "description": "Whether to treat this as an install."
+          "minimum": 1,
+          "description": ".Release.Revision seen by templates. Default: 1, like helm template."
         },
         "isUpgrade": {
           "type": "boolean",
-          "description": "Whether to treat this as an upgrade."
+          "description": "Render as an upgrade (.Release.IsUpgrade true, .Release.IsInstall false)\ninstead of a first install. Template tier only."
         }
       },
       "additionalProperties": false,
@@ -1201,10 +1178,6 @@
       },
       "type": "array",
       "description": "Template files loaded for their define blocks only — no manifests are rendered.\nUsed for helper function tests (call:). Paths relative to chart root."
-    },
-    "chart": {
-      "$ref": "#/$defs/ChartSpec",
-      "description": "Optional chart override for this suite."
     },
     "defaults": {
       "$ref": "#/$defs/Inputs",

@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io/fs"
@@ -342,7 +343,11 @@ func runTest(et expandedTest, suite *dsl.Suite, opts Options, store *snapshot.St
 		return runHelperTest(et, suite, opts, store)
 	}
 
-	req := buildRenderRequest(test, suite, opts)
+	req, err := buildRenderRequest(test, suite, opts)
+	if err != nil {
+		tr.Failures = append(tr.Failures, fmt.Sprintf("        → %v", err))
+		return tr
+	}
 	clog.Trace("render request",
 		"suite", suite.SuiteName, "test", et.DisplayName,
 		"templates", req.Templates, "release", req.ReleaseName,
@@ -352,7 +357,7 @@ func runTest(et expandedTest, suite *dsl.Suite, opts Options, store *snapshot.St
 
 	var allDocs []map[string]any
 	if renderResult != nil {
-		allDocs = renderResult.Docs
+		allDocs = renderResult.Objects()
 	}
 
 	// Schema validation (kubeconform), on by default unless --schema=false. Each
@@ -381,14 +386,9 @@ func runHelperTest(et expandedTest, suite *dsl.Suite, opts Options, store *snaps
 	test := et.Test
 	tr := TestResult{SuiteName: suite.SuiteName, TestName: et.DisplayName}
 
-	// Resolve helper file paths relative to the chart root.
 	resolvedHelpers := make([]string, len(suite.Helpers))
 	for i, h := range suite.Helpers {
-		if filepath.IsAbs(h) {
-			resolvedHelpers[i] = h
-		} else {
-			resolvedHelpers[i] = filepath.Join(opts.ChartPath, h)
-		}
+		resolvedHelpers[i] = resolveAgainst(opts.ChartPath, h)
 	}
 
 	clog.Trace("calling helper",
@@ -429,35 +429,59 @@ func runHelperTest(et expandedTest, suite *dsl.Suite, opts Options, store *snaps
 	return tr
 }
 
-func buildRenderRequest(test dsl.Test, suite *dsl.Suite, opts Options) render.Request {
+func buildRenderRequest(test dsl.Test, suite *dsl.Suite, opts Options) (render.Request, error) {
 	req := render.Request{
 		ChartPath:   opts.ChartPath,
 		Templates:   suite.Templates,
 		ReleaseName: opts.Cfg.Defaults.Release.Name,
 		Namespace:   opts.Cfg.Defaults.Release.Namespace,
+		KubeVersion: renderKubeVersion(opts.KubeVersions),
 	}
-
-	if test.Inputs != nil {
-		if test.Inputs.Release != nil {
-			if test.Inputs.Release.Name != "" {
-				req.ReleaseName = test.Inputs.Release.Name
-			}
-			if test.Inputs.Release.Namespace != "" {
-				req.Namespace = test.Inputs.Release.Namespace
-			}
-		}
-		vals := map[string]any{}
-		for k, v := range test.Inputs.Set {
-			vals[k] = v
-		}
-		req.Values = vals
-		if test.Inputs.Capabilities != nil {
-			req.KubeVersion = test.Inputs.Capabilities.KubeVersion
-			req.APIVersions = test.Inputs.Capabilities.APIVersions
-		}
+	in := test.Inputs
+	if in == nil {
+		return req, nil
 	}
+	if in.Release != nil {
+		req.ReleaseName = cmp.Or(in.Release.Name, req.ReleaseName)
+		req.Namespace = cmp.Or(in.Release.Namespace, req.Namespace)
+		req.Revision = in.Release.Revision
+		req.IsUpgrade = in.Release.IsUpgrade
+	}
+	if in.Capabilities != nil {
+		req.KubeVersion = cmp.Or(in.Capabilities.KubeVersion, req.KubeVersion)
+		req.APIVersions = in.Capabilities.APIVersions
+	}
+	files := make([]string, len(in.Values))
+	for i, f := range in.Values {
+		files[i] = resolveAgainst(opts.ChartPath, f)
+	}
+	vals, err := render.BuildValues(render.ValueInputs{
+		Files:      files,
+		SetJSON:    in.SetJSON,
+		Set:        in.Set,
+		SetLiteral: in.SetLiteral,
+	})
+	if err != nil {
+		return req, fmt.Errorf("inputs: %w", err)
+	}
+	req.Values = vals
+	return req, nil
+}
 
-	return req
+// renderKubeVersion is the Kubernetes version templates see by default: the
+// first one schemas are validated against, so render and kubeconform agree.
+func renderKubeVersion(versions []string) string {
+	if len(versions) > 0 && versions[0] != "" {
+		return versions[0]
+	}
+	return config.DefaultKubeVersion
+}
+
+func resolveAgainst(base, p string) string {
+	if filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Join(base, p)
 }
 
 // selectAllDocs returns all docs matching the target (for forEach).
