@@ -3,6 +3,7 @@ package matchers
 import (
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/fregateops/vigie/internal/dsl"
@@ -69,7 +70,7 @@ func evalLookupSingle(spec *dsl.LookupAssert, ctx EvalContext, dynClient dynamic
 		if time.Now().After(deadline) {
 			return Result{
 				Pass:    false,
-				Message: fmt.Sprintf("lookup: timeout waiting for %s/%s until condition; last object: %v", spec.Kind, spec.Name, lastObj),
+				Message: fmt.Sprintf("lookup: timeout waiting for %s/%s until condition; last object: %v", spec.Kind, spec.Name, redactSecretData(lastObj)),
 			}
 		}
 		if !pause(pollCtx, pollInterval) {
@@ -153,4 +154,29 @@ func runThenAssertions(assertions []dsl.Assertion, obj map[string]any, ctx EvalC
 		}
 	}
 	return Result{Pass: true}
+}
+
+// redactedValue replaces Secret values in failure messages, which end up in CI
+// logs and report files.
+const redactedValue = "<redacted>"
+
+// redactSecretData returns obj with a Secret's data and stringData values
+// masked; any other object is returned unchanged.
+func redactSecretData(obj map[string]any) map[string]any {
+	if obj["kind"] != "Secret" {
+		return obj
+	}
+	redacted := maps.Clone(obj)
+	for _, field := range []string{"data", "stringData"} {
+		values, ok := obj[field].(map[string]any)
+		if !ok {
+			continue
+		}
+		masked := make(map[string]any, len(values))
+		for key := range values {
+			masked[key] = redactedValue
+		}
+		redacted[field] = masked
+	}
+	return redacted
 }
