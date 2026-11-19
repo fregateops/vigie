@@ -160,6 +160,26 @@ Tests: 1 total, 1 passed (140ms total test time)
 Overlays, kube versions, `--set*` overrides, and per-finding `ignore` rules can also be set
 under a `validate:` block in `.vigie.yaml` so CI and local runs stay consistent.
 
+### Schemas
+
+`vigie validate` and the template tier of `vigie test` share one kubeconform setup, configured
+under `schemas:` in `.vigie.yaml`:
+
+- Validation is **strict**: a field the schema does not declare (usually a typo) fails.
+  `schemas.allowUnknownFields: true` opts out.
+- A schema that cannot be fetched **fails** the document instead of passing it unchecked. For
+  offline or air-gapped runs, point `schemas.locations` at a local copy of the schemas.
+- Kinds no location has a schema for (typically CRDs) pass unchecked and are listed in a
+  `vigie: note:` on stderr. Add the [CRDs catalog](https://github.com/datreeio/CRDs-catalog)
+  as a location to check them:
+
+```yaml
+schemas:
+  locations:
+    - default    # upstream Kubernetes schemas
+    - "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+```
+
 ---
 
 ## Test file structure
@@ -167,18 +187,26 @@ under a `validate:` block in `.vigie.yaml` so CI and local runs stay consistent.
 ```yaml
 suite: <name>            # human-readable suite name
 tier: template           # highest tier this suite's matchers may need (optional)
-templates:               # limit rendering to these templates (optional)
-  - templates/deployment.yaml
+templates:               # limit rendering to these templates (optional): paths relative
+  - templates/deployment.yaml  # to the chart root, globs allowed (charts/sub/templates/*.yaml)
 
 tests:
   - it: <description>
     skip: false          # true, or a non-empty string reason, skips the test
     inputs:              # helm rendering inputs (required nesting level)
-      set:               # --set overrides (dot notation supported)
+      values:            # values files (helm -f), relative to the chart root
+        - tests/values/prod.yaml
+      set:               # --set overrides (dot notation); values keep their YAML type
         image.tag: v2.0
+      setJson:           # --set-json overrides (a string is parsed as JSON)
+        podLabels: '{"team": "web"}'
+      setLiteral:        # --set-literal overrides
+        password: "a,b=c"
       release:
         name: my-release
         namespace: my-ns
+        revision: 2      # .Release.Revision (default 1)
+        isUpgrade: true  # .Release.IsUpgrade (default: a first install)
       capabilities:
         kubeVersion: "1.30"
     target:              # which rendered document to assert on (optional)
@@ -241,7 +269,7 @@ YAML as a nested sequence and fails to load.
 | `matchSchema: { path, schema }` | Value validates against an inline JSON Schema fragment |
 | `hasDocuments: <int>` | Number of rendered documents equals N |
 | `failedTemplate: { errorPattern }` | Render failed, optionally matching a regex |
-| `matchSnapshot: { path }` | Value matches on-disk snapshot (auto-created on first run) |
+| `matchSnapshot: { path }` | Value matches on-disk snapshot (created on first local run; a missing snapshot fails in CI) |
 | `allOf` / `anyOf: [...]` | All / at least one nested assertion must pass |
 | `expr: <CEL>` | CEL expression over `doc`/`resources`/`matrix`/`case` evaluates to true |
 
@@ -283,14 +311,15 @@ works at template
 Omit it and the suite is held to `template` — so a render-only suite needs no ceremony, and a
 file that quietly grows a cluster matcher is caught rather than silently skipped later.
 
-Running *below* a suite's tier is fine: matchers that need more are reported as skips naming
-the flag that would run them, and a run where everything skipped fails rather than reporting a
+Running *below* a suite's tier is fine: tests whose matchers, dependencies, or hooks need more
+are reported as skips naming the flag that would run them, and a run where everything skipped fails rather than reporting a
 green pass over nothing. Running *above* it is fine too — a `tier: template` suite runs
 unchanged under `--cluster kind`, which is why the same files serve the fast loop and CI.
 
 ### Selecting a document
 
-When a test renders multiple documents, pin one with `target:`:
+An assertion runs against one document. When the render produces several and nothing picks
+one, the assertion fails and lists the candidates — it never guesses. Pin one with `target:`:
 
 ```yaml
 target:
@@ -311,6 +340,7 @@ asserts:
 ```
 
 Set `forEach: true` on a test to run every assertion against **all** documents matching `target`.
+A `target` that matches several documents without `forEach` fails the same way as no target.
 
 ### Helper (`call:`) tests
 
@@ -377,7 +407,7 @@ vigie test [chart]            render + assert; --cluster raises fidelity to a li
   --file <path>               run a single test file instead of discovering all
   --tests <dir>               discovery root (default: <chart>/tests)
   --match <regex>             run only tests whose display name matches
-  -u, --update-snapshots      update snapshots on mismatch instead of failing
+  -u, --update-snapshots      rewrite every snapshot (missing ones are created locally, fail in CI)
   --fail-fast                 cancel queued tests after the first failure
   --schema                    run the per-test kubeconform pass (default: true; --schema=false skips)
   --kube-version <a,b,…>      Kubernetes version(s): template matrixes all, cluster uses the first
@@ -431,6 +461,10 @@ validate:
   ignore:
     - kind: Ingress                 # suppress a known kubeconform finding
       messageRegex: "networking.k8s.io/v1"
+
+schemas:
+  locations: [default]       # kubeconform schema locations (URL templates or local dirs)
+  allowUnknownFields: false  # strict by default: undeclared fields fail
 
 test:
   testsDir: tests            # single root holding every test file, scanned recursively
