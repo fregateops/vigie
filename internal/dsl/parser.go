@@ -20,6 +20,9 @@ func ParseFile(path string) (*Suite, error) {
 // Parse validates rawYAML against the JSON Schema and unmarshals it into a Suite.
 func Parse(rawYAML []byte, sourcePath string) (*Suite, error) {
 	if err := Validate(rawYAML); err != nil {
+		if hu := detectHelmUnittest(rawYAML, sourcePath); hu != nil {
+			return nil, hu
+		}
 		return nil, fmt.Errorf("%s: %w", sourcePath, err)
 	}
 

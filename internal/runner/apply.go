@@ -197,7 +197,7 @@ func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult
 
 	suite, expanded, err := loadSuite(filePath)
 	if err != nil {
-		return loadFailure(filePath, err, time.Since(start)), nil
+		return unloadedSuite(filePath, err, time.Since(start)), nil
 	}
 	slog.Debug("parsed suite", "file", filePath, "tier", suite.SuiteTier(), "suite", suite.SuiteName)
 

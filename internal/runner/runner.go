@@ -3,6 +3,7 @@ package runner
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -182,7 +183,7 @@ func runFile(filePath string, opts Options, validators []versionedValidator, mat
 
 	suite, expanded, err := loadSuite(filePath)
 	if err != nil {
-		return loadFailure(filePath, err, time.Since(start))
+		return unloadedSuite(filePath, err, time.Since(start))
 	}
 	sr := SuiteResult{File: filePath, Suite: suite.SuiteName}
 	slog.Debug("expanded test cases", "suite", suite.SuiteName, "count", len(expanded))
@@ -235,21 +236,31 @@ func loadSuite(filePath string) (*dsl.Suite, []expandedTest, error) {
 	return suite, expanded, nil
 }
 
-// loadFailure reports a test file that could not be loaded as one failed
-// test, so the rest of the run still executes and is reported.
-func loadFailure(filePath string, err error, elapsed time.Duration) SuiteResult {
+// unloadedSuite reports a test file that could not be loaded: a helm-unittest
+// file as skipped, anything else as one failed test. Either way the rest of
+// the run still executes and is reported.
+func unloadedSuite(filePath string, err error, elapsed time.Duration) SuiteResult {
 	name := filepath.Base(filePath)
-	return SuiteResult{
-		File:     filePath,
-		Suite:    name,
-		Duration: elapsed,
-		Results: []TestResult{{
+	result := TestResult{SuiteName: name, TestName: "load test file", Duration: elapsed}
+	var hu *dsl.HelmUnittestError
+	if errors.As(err, &hu) {
+		name = cmp.Or(hu.Suite, name)
+		tests := fmt.Sprintf("%d tests", hu.Tests)
+		if hu.Tests == 1 {
+			tests = "1 test"
+		}
+		result = TestResult{
 			SuiteName: name,
-			TestName:  "load test file",
-			Failures:  []string{fmt.Sprintf("        → %v", err)},
-			Duration:  elapsed,
-		}},
+			TestName:  "helm-unittest file (" + tests + ")",
+			Pass:      true,
+			Skipped:   true,
+			SkipReason: fmt.Sprintf("follows the helm-unittest format (%s); vigie does not run helm-unittest files, "+
+				"keep running them with `helm unittest` or rewrite them in vigie's format", hu.Marker),
+		}
+	} else {
+		result.Failures = []string{fmt.Sprintf("        → %v", err)}
 	}
+	return SuiteResult{File: filePath, Suite: name, Duration: elapsed, Results: []TestResult{result}}
 }
 
 func skippedSuite(suite *dsl.Suite, expanded []expandedTest, matchRE *regexp.Regexp, reason string) []TestResult {
