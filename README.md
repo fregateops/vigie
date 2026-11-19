@@ -79,7 +79,10 @@ go build -o vigie ./cmd/vigie
 ## Quick start
 
 Drop test files under `tests/` in your chart — one root for every test file, scanned
-recursively, with sub-directories purely for organisation:
+recursively, with sub-directories purely for organisation (`*_test.yaml`). A chart
+already tested with [helm-unittest](https://github.com/helm-unittest/helm-unittest) can keep its
+files there: vigie recognises them and reports each as skipped instead of failing on them.
+Rewrite them in vigie's format to run them with vigie.
 
 ```yaml
 # mychart/tests/unit/deployment_test.yaml
