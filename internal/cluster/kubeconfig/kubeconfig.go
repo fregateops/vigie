@@ -39,7 +39,6 @@ type Backend struct {
 	pinnedPath string
 }
 
-// New returns an unstarted Backend for the given kubeconfig and context.
 func New(kubeconfigPath, contextName string) *Backend {
 	return &Backend{kubeconfigPath: kubeconfigPath, contextName: contextName}
 }

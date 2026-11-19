@@ -23,7 +23,6 @@ const (
 	waitDelay = 5 * time.Second
 )
 
-// Spec is one command plus the context vigie runs it in.
 type Spec struct {
 	Command dsl.ShellCommand
 	// Timeout applies when Command sets none.
@@ -34,7 +33,6 @@ type Spec struct {
 	Env []string
 }
 
-// Output is what a finished command wrote.
 type Output struct {
 	Stdout, Stderr []byte
 }
