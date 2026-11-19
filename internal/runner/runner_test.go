@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/fregateops/vigie/internal/dsl"
@@ -77,6 +78,21 @@ func TestSelectDoc(t *testing.T) {
 		doc, diag := selectDoc(dsl.Assertion{}, nil, nil, nil)
 		if doc != nil || diag == "" {
 			t.Fatalf("want nil doc + diagnostic; got doc=%v diag=%q", doc, diag)
+		}
+	})
+
+	t.Run("no target, several docs is ambiguous", func(t *testing.T) {
+		doc, diag := selectDoc(dsl.Assertion{}, nil, docs, nil)
+		if doc != nil || !strings.Contains(diag, "forEach") || !strings.Contains(diag, "Service/") {
+			t.Fatalf("want nil doc + diagnostic listing candidates and the fix; got doc=%v diag=%q", doc, diag)
+		}
+	})
+
+	t.Run("target matching several docs is ambiguous", func(t *testing.T) {
+		svc2 := map[string]any{"kind": "Service", "metadata": map[string]any{"name": "other"}}
+		doc, diag := selectDoc(dsl.Assertion{}, &dsl.TargetSpec{Kind: "Service"}, []map[string]any{svcDoc, svc2}, nil)
+		if doc != nil || !strings.Contains(diag, "Service/other") {
+			t.Fatalf("want nil doc + diagnostic listing both Services; got doc=%v diag=%q", doc, diag)
 		}
 	})
 
