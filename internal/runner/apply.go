@@ -415,6 +415,7 @@ func (r *applyRunner) runTest(ctx context.Context, et expandedTest, suite *dsl.S
 	var installErr error
 	if renderErr == nil {
 		installErr = r.helmInstall(ctx, chrt, vals, releaseName, namespace)
+		defer r.helmUninstall(releaseName, namespace)
 		// Suppress the install-error append when the test declares a
 		// `rejected:` matcher: rejection is the *expected* outcome and the
 		// matcher itself reads installErr to decide pass/fail. Without this,
@@ -434,33 +435,68 @@ func (r *applyRunner) runTest(ctx context.Context, et expandedTest, suite *dsl.S
 	return tr
 }
 
-// helmInstall installs the chart against the live cluster. Wait=false so the
-// install returns as soon as the API server accepts the resources; tests that
-// need post-apply settling express it explicitly via waitFor / becomesReady /
-// lookup matchers. Hooks remain disabled - tests that need pre/post-install
-// hooks should add them via setup/teardown.
-func (r *applyRunner) helmInstall(ctx context.Context, chrt *chart.Chart, vals map[string]any, releaseName, namespace string) error {
+// helmHookTimeout bounds how long install and uninstall wait for chart hooks
+// (e.g. a pre-install Job generating certificates) to complete.
+const helmHookTimeout = 5 * time.Minute
+
+func (r *applyRunner) helmConfig(namespace string) (*action.Configuration, error) {
 	cfg := new(action.Configuration)
 	getter := kubeclient.NewRESTGetter(r.kubeCfg, namespace)
 	logFn := func(format string, args ...any) {
 		slog.Debug("helm: " + fmt.Sprintf(format, args...))
 	}
 	if err := cfg.Init(getter, namespace, "secret", logFn); err != nil {
-		return fmt.Errorf("helm action.Configuration.Init: %w", err)
+		return nil, fmt.Errorf("helm action.Configuration.Init: %w", err)
 	}
+	return cfg, nil
+}
 
+// runsChartHooks reports whether the tier can run chart hooks: a hook Job
+// only completes where pods run, so below that tier every install would sit
+// out helmHookTimeout instead.
+func (r *applyRunner) runsChartHooks() bool {
+	return dsl.TierProvides(r.activeTier)[dsl.RunningPods]
+}
+
+// helmInstall installs the chart against the live cluster. Wait=false so the
+// install returns as soon as the API server accepts the resources; tests that
+// need post-apply settling express it explicitly via waitFor / becomesReady /
+// lookup matchers. Chart hooks run (and are waited for) where pods run.
+func (r *applyRunner) helmInstall(ctx context.Context, chrt *chart.Chart, vals map[string]any, releaseName, namespace string) error {
+	cfg, err := r.helmConfig(namespace)
+	if err != nil {
+		return err
+	}
 	install := action.NewInstall(cfg)
 	install.ReleaseName = releaseName
 	install.Namespace = namespace
-	install.CreateNamespace = false
-	install.Wait = false
-	install.DisableHooks = true
-	install.DryRun = false
-	install.Replace = false
-	install.ClientOnly = false
-
-	_, err := install.RunWithContext(ctx, chrt, vals)
+	install.DisableHooks = !r.runsChartHooks()
+	install.Timeout = helmHookTimeout
+	_, err = install.RunWithContext(ctx, chrt, vals)
 	return err
+}
+
+// helmUninstall removes the test's release before its namespace goes, so the
+// chart's cluster-scoped objects (ClusterRoles, webhook configurations, ...)
+// do not outlive the test and collide with the next install. It runs on a
+// detached context so an interrupted run still cleans up.
+func (r *applyRunner) helmUninstall(releaseName, namespace string) {
+	if r.opts.KeepCluster {
+		return
+	}
+	cfg, err := r.helmConfig(namespace)
+	if err != nil {
+		slog.Warn("helm uninstall skipped", "release", releaseName, "namespace", namespace, "err", err)
+		return
+	}
+	uninstall := action.NewUninstall(cfg)
+	uninstall.DisableHooks = !r.runsChartHooks()
+	uninstall.Timeout = helmHookTimeout
+	uninstall.IgnoreNotFound = true
+	if _, err := uninstall.Run(releaseName); err != nil {
+		slog.Warn("helm uninstall failed; cluster-scoped objects of the release may remain",
+			"release", releaseName, "namespace", namespace, "err", err)
+	}
 }
 
 func (r *applyRunner) createNamespace(ctx context.Context, name string) error {
