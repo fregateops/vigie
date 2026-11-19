@@ -1,13 +1,11 @@
 package deps
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -18,10 +16,10 @@ import (
 	"k8s.io/client-go/rest"
 
 	"github.com/fregateops/vigie/internal/dsl"
+	"github.com/fregateops/vigie/internal/shellcmd"
 )
 
 const (
-	defaultGenerateShell   = "sh"
 	defaultGenerateTimeout = 30 * time.Second
 	secretManagedBy        = "secrets"
 )
@@ -169,55 +167,18 @@ func resolveOneSource(ctx context.Context, key dsl.SecretKeySpec, baseDir string
 }
 
 // runGenerate executes the user-supplied shell command and returns stdout as
-// raw bytes. The command runs with `shell -c run`; stderr is captured for
-// diagnostics but never logged when the command succeeds.
-func runGenerate(parent context.Context, cmd dsl.ShellCommand, baseDir string) ([]byte, error) {
-	if cmd.Run == "" {
-		return nil, errors.New("generate.run is required")
-	}
-	shell := cmd.Shell
-	if shell == "" {
-		shell = defaultGenerateShell
-	}
-	timeout := defaultGenerateTimeout
-	if cmd.Timeout != "" {
-		d, err := time.ParseDuration(cmd.Timeout)
-		if err != nil {
-			return nil, fmt.Errorf("parsing timeout %q: %w", cmd.Timeout, err)
-		}
-		timeout = d
-	}
-
-	ctx, cancel := context.WithTimeout(parent, timeout)
-	defer cancel()
-
-	execCmd := exec.CommandContext(ctx, shell, "-c", cmd.Run)
-	if cmd.Dir != "" {
-		execCmd.Dir = cmd.Dir
-	} else if baseDir != "" {
-		execCmd.Dir = baseDir
-	}
-	if len(cmd.Env) > 0 {
-		envSlice := append([]string{}, os.Environ()...)
-		for k, v := range cmd.Env {
-			envSlice = append(envSlice, k+"="+v)
-		}
-		execCmd.Env = envSlice
-	}
-
-	var stdout, stderr bytes.Buffer
-	execCmd.Stdout = &stdout
-	execCmd.Stderr = &stderr
-
-	if err := execCmd.Run(); err != nil {
-		// stderr captured separately; never include stdout in error messages.
-		stderrStr := strings.TrimSpace(stderr.String())
-		if stderrStr != "" {
-			return nil, fmt.Errorf("generate command failed: %w (stderr: %s)", err, stderrStr)
+// the secret value. Relative paths run against baseDir unless the command
+// sets its own dir.
+func runGenerate(ctx context.Context, cmd dsl.ShellCommand, baseDir string) ([]byte, error) {
+	out, err := shellcmd.Run(ctx, shellcmd.Spec{Command: cmd, Timeout: defaultGenerateTimeout, Dir: baseDir})
+	if err != nil {
+		// stderr captured separately; never include stdout (the secret) in error messages.
+		if stderr := strings.TrimSpace(string(out.Stderr)); stderr != "" {
+			return nil, fmt.Errorf("generate command failed: %w (stderr: %s)", err, stderr)
 		}
 		return nil, fmt.Errorf("generate command failed: %w", err)
 	}
-	return stdout.Bytes(), nil
+	return out.Stdout, nil
 }
 
 // upsertSecret creates or patches an Opaque Secret. We use Get-then-Update to

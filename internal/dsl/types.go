@@ -473,6 +473,13 @@ type ShellCommand struct {
 	// Environment variables to set.
 	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
 
+	// Names of vigie's own environment variables to pass through (e.g. a
+	// registry token). The command otherwise sees only PATH, HOME, USER,
+	// SHELL, TMPDIR, locale and terminal variables, plus KUBECONFIG and the
+	// VIGIE_* variables, so CI secrets stay out unless named here. A listed
+	// variable that is not set is an error.
+	PassEnv []string `yaml:"passEnv,omitempty" json:"passEnv,omitempty"`
+
 	// Maximum time to allow the command to run, as a Go duration.
 	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
 }
