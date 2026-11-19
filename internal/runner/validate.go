@@ -110,7 +110,7 @@ func runValidateOverlay(opts ValidateOptions, overlayPath string, kubeVersions [
 		req := render.Request{
 			ChartPath:   opts.ChartPath,
 			Values:      values,
-			ReleaseName:   opts.Cfg.Defaults.Release.Name,
+			ReleaseName: opts.Cfg.Defaults.Release.Name,
 			Namespace:   opts.Cfg.Defaults.Release.Namespace,
 			KubeVersion: kv,
 		}
