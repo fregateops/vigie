@@ -1,6 +1,8 @@
 package matchers
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/fregateops/vigie/internal/dsl"
@@ -112,5 +114,20 @@ func TestRunThenAssertions_Empty(t *testing.T) {
 	result := runThenAssertions(nil, obj, EvalContext{InApplyTier: true})
 	if !result.Pass {
 		t.Errorf("expected pass with empty assertions, got message: %s", result.Message)
+	}
+}
+
+func TestRedactSecretData(t *testing.T) {
+	secret := map[string]any{"kind": "Secret", "data": map[string]any{"password": "aHVudGVyMg=="}, "stringData": map[string]any{"token": "t0k3n"}}
+	got := fmt.Sprint(redactSecretData(secret))
+	if strings.Contains(got, "aHVudGVyMg==") || strings.Contains(got, "t0k3n") || !strings.Contains(got, "password") {
+		t.Errorf("want keys kept and values masked, got %s", got)
+	}
+	if secret["data"].(map[string]any)["password"] != "aHVudGVyMg==" {
+		t.Error("redaction must not mutate the live object")
+	}
+	configMap := map[string]any{"kind": "ConfigMap", "data": map[string]any{"k": "v"}}
+	if fmt.Sprint(redactSecretData(configMap)) != fmt.Sprint(configMap) {
+		t.Error("non-Secret objects must be left as they are")
 	}
 }
