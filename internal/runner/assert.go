@@ -39,6 +39,11 @@ func evaluateAssertions(tr *TestResult, et expandedTest, suite *dsl.Suite, allDo
 		tr.RenderedAsserts++
 	}
 
+	if renderErr != nil && !expectsRenderFailure(test.Asserts) {
+		tr.Failures = append(tr.Failures, fmt.Sprintf("        → render failed: %v", renderErr))
+		return
+	}
+
 	evalContext := func(doc map[string]any, assertIdx int) matchers.EvalContext {
 		return matchers.EvalContext{
 			Docs:          allDocs,
@@ -95,4 +100,15 @@ func evaluateAssertions(tr *TestResult, et expandedTest, suite *dsl.Suite, allDo
 			tr.Failures = append(tr.Failures, fmt.Sprintf("        → %s", result.Message))
 		}
 	}
+}
+
+// expectsRenderFailure reports whether the test asserts on the render error
+// itself, in which case a failed render is the expected outcome.
+func expectsRenderFailure(asserts []dsl.Assertion) bool {
+	for _, a := range asserts {
+		if a.FailedTemplate != nil {
+			return true
+		}
+	}
+	return false
 }
