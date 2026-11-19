@@ -196,19 +196,13 @@ func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult
 	slog.Debug("loading test file", "file", filePath)
 	start := time.Now()
 
-	suite, err := dsl.ParseFile(filePath)
+	suite, expanded, err := loadSuite(filePath)
 	if err != nil {
-		return SuiteResult{File: filePath}, fmt.Errorf("setup error: %w", err)
+		return loadFailure(filePath, err, time.Since(start)), nil
 	}
-	dsl.MergeInputs(suite)
 	slog.Debug("parsed suite", "file", filePath, "tier", suite.SuiteTier(), "suite", suite.SuiteName)
 
 	sr := SuiteResult{File: filePath, Suite: suite.SuiteName}
-
-	expanded, err := expandTests(suite.Tests)
-	if err != nil {
-		return SuiteResult{File: filePath, Suite: suite.SuiteName}, fmt.Errorf("expand error: %w", err)
-	}
 
 	chrt, err := loader.Load(r.opts.ChartPath)
 	if err != nil {

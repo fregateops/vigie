@@ -165,41 +165,33 @@ func Run(opts Options) ([]SuiteResult, error) {
 		default:
 		}
 
-		sr, fileErr := runFile(path, opts, validators, matchRE)
-		if opts.FailFast && fileErr == nil && SuiteHasFailure(sr) {
+		sr := runFile(path, opts, validators, matchRE)
+		if opts.FailFast && SuiteHasFailure(sr) {
 			failFastOnce.Do(func() {
 				slog.Debug("test: fail-fast triggered", "file", path)
 				cancelRun()
 			})
 		}
-		return sr, fileErr
+		return sr, nil
 	})
 }
 
-func runFile(filePath string, opts Options, validators []versionedValidator, matchRE *regexp.Regexp) (SuiteResult, error) {
+func runFile(filePath string, opts Options, validators []versionedValidator, matchRE *regexp.Regexp) SuiteResult {
 	slog.Debug("loading test file", "file", filePath)
 	start := time.Now()
 
-	suite, err := dsl.ParseFile(filePath)
+	suite, expanded, err := loadSuite(filePath)
 	if err != nil {
-		return SuiteResult{}, fmt.Errorf("setup error: %w", err)
+		return loadFailure(filePath, err, time.Since(start))
 	}
-	dsl.MergeInputs(suite)
-
 	sr := SuiteResult{File: filePath, Suite: suite.SuiteName}
-
-	// EXPAND phase: matrix/cases expansion.
-	expanded, err := expandTests(suite.Tests)
-	if err != nil {
-		return SuiteResult{}, fmt.Errorf("expand error: %w", err)
-	}
 	slog.Debug("expanded test cases", "suite", suite.SuiteName, "count", len(expanded))
 
 	if skip, reason := integrationFeatureSkip(suite, matchers.TierTemplate); skip {
 		slog.Debug("skipping suite (integration features unsupported)", "file", filePath, "reason", reason)
 		sr.Results = skippedSuite(suite, expanded, matchRE, reason)
 		sr.Duration = time.Since(start)
-		return sr, nil
+		return sr
 	}
 
 	store := &snapshot.Store{Dir: resolveSnapshotDir(opts.SnapshotDir, opts.ChartPath), Update: opts.SnapshotUpdate}
@@ -227,7 +219,38 @@ func runFile(filePath string, opts Options, validators []versionedValidator, mat
 	}
 	sr.Duration = time.Since(start)
 	slog.Debug("suite finished", "suite", suite.SuiteName, "tests", len(sr.Results), "duration", sr.Duration)
-	return sr, nil
+	return sr
+}
+
+// loadSuite parses a test file and expands its matrix/cases.
+func loadSuite(filePath string) (*dsl.Suite, []expandedTest, error) {
+	suite, err := dsl.ParseFile(filePath)
+	if err != nil {
+		return nil, nil, err
+	}
+	dsl.MergeInputs(suite)
+	expanded, err := expandTests(suite.Tests)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s: %w", filePath, err)
+	}
+	return suite, expanded, nil
+}
+
+// loadFailure reports a test file that could not be loaded as one failed
+// test, so the rest of the run still executes and is reported.
+func loadFailure(filePath string, err error, elapsed time.Duration) SuiteResult {
+	name := filepath.Base(filePath)
+	return SuiteResult{
+		File:     filePath,
+		Suite:    name,
+		Duration: elapsed,
+		Results: []TestResult{{
+			SuiteName: name,
+			TestName:  "load test file",
+			Failures:  []string{fmt.Sprintf("        → %v", err)},
+			Duration:  elapsed,
+		}},
+	}
 }
 
 // skippedSuite reports every selected test of a suite as skipped for reason.
