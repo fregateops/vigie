@@ -56,6 +56,23 @@ func TestTest_BasicChart_AllPass(t *testing.T) {
 	}
 }
 
+func TestTest_BasicChart_IntegrationSuitesSkipWithReason(t *testing.T) {
+	results := runTestSuite(t, "../../testdata/charts/basic", "")
+	for _, sr := range results {
+		if !strings.Contains(sr.File, "integration") {
+			continue
+		}
+		if len(sr.Results) == 0 {
+			t.Fatalf("%s: integration suite dropped from the template run instead of reported as skipped", sr.File)
+		}
+		for _, tr := range sr.Results {
+			if !tr.Skipped || !strings.Contains(tr.SkipReason, "--cluster") {
+				t.Errorf("%s / %s: want skipped with a --cluster hint, got skipped=%v reason=%q", sr.File, tr.TestName, tr.Skipped, tr.SkipReason)
+			}
+		}
+	}
+}
+
 func TestTest_FailingChart_ReportsFailure(t *testing.T) {
 	results := runTestSuite(t, "../../testdata/charts/test-failures", t.TempDir())
 	if !runner.AnyFailed(results) {

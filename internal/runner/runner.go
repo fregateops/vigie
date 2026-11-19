@@ -195,7 +195,13 @@ func runFile(filePath string, opts Options, validators []versionedValidator, mat
 	}
 	slog.Debug("expanded test cases", "suite", suite.SuiteName, "count", len(expanded))
 
-	// Resolve snapshot store.
+	if skip, reason := integrationFeatureSkip(suite, matchers.TierTemplate); skip {
+		slog.Debug("skipping suite (integration features unsupported)", "file", filePath, "reason", reason)
+		sr.Results = skippedSuite(suite, expanded, matchRE, reason)
+		sr.Duration = time.Since(start)
+		return sr, nil
+	}
+
 	store := &snapshot.Store{Dir: resolveSnapshotDir(opts.SnapshotDir, opts.ChartPath), Update: opts.SnapshotUpdate}
 
 	for _, et := range expanded {
@@ -222,6 +228,24 @@ func runFile(filePath string, opts Options, validators []versionedValidator, mat
 	sr.Duration = time.Since(start)
 	slog.Debug("suite finished", "suite", suite.SuiteName, "tests", len(sr.Results), "duration", sr.Duration)
 	return sr, nil
+}
+
+// skippedSuite reports every selected test of a suite as skipped for reason.
+func skippedSuite(suite *dsl.Suite, expanded []expandedTest, matchRE *regexp.Regexp, reason string) []TestResult {
+	var results []TestResult
+	for _, et := range expanded {
+		if matchRE != nil && !matchRE.MatchString(et.DisplayName) {
+			continue
+		}
+		results = append(results, TestResult{
+			SuiteName:  suite.SuiteName,
+			TestName:   et.DisplayName,
+			Pass:       true,
+			Skipped:    true,
+			SkipReason: reason,
+		})
+	}
+	return results
 }
 
 // expandTests expands all matrix/cases for a list of tests.
@@ -759,36 +783,15 @@ func SuiteHasFailure(sr SuiteResult) bool {
 	return false
 }
 
-// DiscoverTestFiles walks the configured tests directory recursively and
-// returns every `*_test.yaml` file with at least one test that can run at the
-// template tier. testsDir overrides the default `<chartPath>/tests` root;
-// relative testsDir resolves against chartPath.
+// DiscoverTestFiles walks the tests root recursively and returns every
+// `*_test.yaml` file, sorted. testsDir overrides the default `<chartPath>/tests`
+// root; relative testsDir resolves against chartPath. A missing root yields an
+// empty slice.
 //
-// The filter is what a file *needs*, not what its `tier:` declares: `tier:` is
-// a ceiling on content, so a suite that declares e2e but asserts only on
-// rendered manifests still belongs in a template run.
+// Every file is returned whatever the active tier: a suite needing more than
+// the tier provides is reported as skipped with the flag that would run it,
+// never silently dropped.
 func DiscoverTestFiles(chartPath, testsDir string) ([]string, error) {
-	return discoverTestFiles(chartPath, testsDir, matchers.TierTemplate)
-}
-
-// resolveTestsRoot resolves the user-configured testsDir against the chart
-// directory. Empty testsDir falls back to `<chartPath>/tests`. Returns the
-// absolute path the walker should crawl.
-func resolveTestsRoot(chartPath, testsDir string) string {
-	if testsDir == "" {
-		return filepath.Join(chartPath, "tests")
-	}
-	if filepath.IsAbs(testsDir) {
-		return testsDir
-	}
-	return filepath.Join(chartPath, testsDir)
-}
-
-// discoverTestFiles walks resolveTestsRoot(chartPath, testsDir) recursively for
-// files matching `*_test.yaml` and returns them sorted by path. An empty
-// `tier` keeps every file; otherwise a file is kept only if some test in it can
-// run at that tier. A missing root directory yields an empty slice.
-func discoverTestFiles(chartPath, testsDir, tier string) ([]string, error) {
 	root := resolveTestsRoot(chartPath, testsDir)
 
 	info, err := os.Stat(root)
@@ -807,25 +810,7 @@ func discoverTestFiles(chartPath, testsDir, tier string) ([]string, error) {
 		if err != nil {
 			return err
 		}
-		if entry.IsDir() {
-			return nil
-		}
-		if !strings.HasSuffix(entry.Name(), "_test.yaml") {
-			return nil
-		}
-		if tier == "" {
-			matches = append(matches, path)
-			return nil
-		}
-		suite, perr := dsl.ParseFile(path)
-		if perr != nil {
-			// Keep the file: the runner reports a parse failure against the file
-			// that caused it, where dropping it here would either hide the error
-			// or abort the whole walk over one bad suite.
-			matches = append(matches, path)
-			return nil
-		}
-		if unrunnable, _ := UnrunnableAt(suite, tier); !unrunnable {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), "_test.yaml") {
 			matches = append(matches, path)
 		}
 		return nil
@@ -835,4 +820,13 @@ func discoverTestFiles(chartPath, testsDir, tier string) ([]string, error) {
 	}
 	sort.Strings(matches)
 	return matches, nil
+}
+
+// resolveTestsRoot resolves the user-configured testsDir against the chart
+// directory. Empty testsDir falls back to `<chartPath>/tests`.
+func resolveTestsRoot(chartPath, testsDir string) string {
+	if testsDir == "" {
+		return filepath.Join(chartPath, "tests")
+	}
+	return resolveAgainst(chartPath, testsDir)
 }
