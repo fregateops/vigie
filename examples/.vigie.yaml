@@ -67,12 +67,32 @@ lint:
     - "1.31"
 
   # Suppress findings for a specific rule, optionally scoped to file paths.
-  # `paths` is a list of glob patterns matched against the finding's source
-  # file path. Omit `paths` to suppress the rule everywhere.
+  # `paths` is a list of glob patterns (Go path.Match syntax) matched against
+  # the template that produced the finding, relative to the chart root
+  # (subchart templates are `charts/<name>/templates/...`). Omit `paths` to
+  # suppress the rule everywhere.
   ignore:
     - rule: template-best-practices_missing-resource-limits
       paths:
         - templates/jobs/*.yaml
+
+# ---------------------------------------------------------------------------
+# schemas — the kubeconform pass shared by `vigie validate` and the template
+# tier of `vigie test`.
+# ---------------------------------------------------------------------------
+schemas:
+  # Searched in order for each kind's JSON Schema, in kubeconform
+  # `-schema-location` syntax: `default` (upstream Kubernetes schemas), a URL
+  # template, or a local directory (relative to the chart) for offline runs.
+  # A schema that cannot be fetched fails validation; a kind no location
+  # covers (typically a CRD) passes unchecked and is listed in a stderr note.
+  # Empty/omitted means `[default]`.
+  locations:
+    - default
+    - "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+  # Accept fields a schema does not declare. Default false: an undeclared
+  # field, usually a typo, fails validation.
+  allowUnknownFields: false
 
 # ---------------------------------------------------------------------------
 # test — controls `vigie test`, in every tier: the template tier (per-test
