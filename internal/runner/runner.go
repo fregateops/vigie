@@ -61,7 +61,7 @@ type Options struct {
 	Parallelism     int
 	Cfg             *config.Config
 	SnapshotDir     string // default: "<chartPath>/tests/snapshots"
-	SnapshotUpdate  bool
+	SnapshotMode    snapshot.Mode
 	ValidateSchemas bool     // when true, kubeconform-validate each test's rendered docs
 	KubeVersions    []string // kubernetes versions to schema-validate against; empty = [config.DefaultKubeVersion]
 	// Match is a regex evaluated against expanded test display names. Empty
@@ -194,7 +194,7 @@ func runFile(filePath string, opts Options, validators []versionedValidator, mat
 		return sr
 	}
 
-	store := &snapshot.Store{Dir: resolveSnapshotDir(opts.SnapshotDir, opts.ChartPath), Update: opts.SnapshotUpdate}
+	store := &snapshot.Store{Dir: resolveSnapshotDir(opts.SnapshotDir, opts.ChartPath), Mode: opts.SnapshotMode}
 
 	for _, et := range expanded {
 		if matchRE != nil && !matchRE.MatchString(et.DisplayName) {

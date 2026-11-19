@@ -16,6 +16,7 @@ import (
 	"github.com/fregateops/vigie/internal/doctor"
 	"github.com/fregateops/vigie/internal/dsl"
 	"github.com/fregateops/vigie/internal/runner"
+	"github.com/fregateops/vigie/internal/snapshot"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -89,7 +90,7 @@ func init() {
 	testCmd.Flags().BoolVar(&flagTestFailFast, "fail-fast", false, "Cancel queued tests after the first failure")
 	testCmd.Flags().BoolVar(&flagTestKeepCluster, "keep-cluster", false, "Keep the cluster running after the suite for debugging (node-backed backends only)")
 	testCmd.Flags().StringVar(&flagTestMatch, "match", "", "Run only tests whose display name matches this regex")
-	testCmd.Flags().BoolVarP(&flagTestUpdateSnapshots, "update-snapshots", "u", false, "Update snapshots on mismatch instead of failing")
+	testCmd.Flags().BoolVarP(&flagTestUpdateSnapshots, "update-snapshots", "u", false, "Rewrite every snapshot with the current output (missing snapshots are created locally, but fail in CI)")
 	testCmd.Flags().StringVar(&flagTestKindBinary, "kind-binary", "", "Path to the kind CLI (default: resolve from PATH, then the vigie cache, then download)")
 	testCmd.Flags().StringVar(&flagTestK3dBinary, "k3d-binary", "", "Path to the k3d CLI (default: resolve from PATH, then the vigie cache, then download)")
 	testCmd.Flags().BoolVar(&flagTestDownloadTools, "download-tools", false, "Download a missing kind/k3d CLI without prompting (for CI/automation; also VIGIE_AUTO_DOWNLOAD)")
@@ -217,7 +218,7 @@ func runTests(ctx context.Context, chartPath string, cfg *config.Config, files [
 			Parallelism:     flagParallelism,
 			Cfg:             cfg,
 			SnapshotDir:     flagTestSnapshotDir,
-			SnapshotUpdate:  flagTestUpdateSnapshots,
+			SnapshotMode:    snapshotMode(),
 			ValidateSchemas: !skipSchema,
 			KubeVersions:    kubeVersions,
 			Match:           flagTestMatch,
@@ -233,17 +234,17 @@ func runTests(ctx context.Context, chartPath string, cfg *config.Config, files [
 		exitErr(3, "configuring cluster backend: %v", err)
 	}
 	return runner.RunApply(ctx, runner.ApplyOptions{
-		ChartPath:      chartPath,
-		TestFiles:      files,
-		Parallelism:    flagParallelism,
-		Cfg:            cfg,
-		Backend:        backend,
-		BackendType:    clusterCfg.Type,
-		SnapshotDir:    flagTestSnapshotDir,
-		SnapshotUpdate: flagTestUpdateSnapshots,
-		Match:          flagTestMatch,
-		FailFast:       flagTestFailFast,
-		KeepCluster:    flagTestKeepCluster,
+		ChartPath:    chartPath,
+		TestFiles:    files,
+		Parallelism:  flagParallelism,
+		Cfg:          cfg,
+		Backend:      backend,
+		BackendType:  clusterCfg.Type,
+		SnapshotDir:  flagTestSnapshotDir,
+		SnapshotMode: snapshotMode(),
+		Match:        flagTestMatch,
+		FailFast:     flagTestFailFast,
+		KeepCluster:  flagTestKeepCluster,
 	})
 }
 
@@ -390,4 +391,17 @@ func displayTestsRoot(chartPath, testsDir string) string {
 		return testsDir
 	}
 	return filepath.Join(chartPath, testsDir)
+}
+
+// snapshotMode is -u's overwrite, else compare-only in CI so a missing
+// snapshot fails instead of being written and passing.
+func snapshotMode() snapshot.Mode {
+	switch {
+	case flagTestUpdateSnapshots:
+		return snapshot.Overwrite
+	case cienv.IsCI():
+		return snapshot.CompareOnly
+	default:
+		return snapshot.CreateMissing
+	}
 }

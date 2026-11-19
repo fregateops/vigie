@@ -7,9 +7,9 @@ import (
 	"github.com/fregateops/vigie/internal/snapshot"
 )
 
-func newStore(t *testing.T, update bool) *snapshot.Store {
+func newStore(t *testing.T, mode snapshot.Mode) *snapshot.Store {
 	t.Helper()
-	return &snapshot.Store{Dir: t.TempDir(), Update: update}
+	return &snapshot.Store{Dir: t.TempDir(), Mode: mode}
 }
 
 func TestEvalMatchSnapshot_NoStore(t *testing.T) {
@@ -24,7 +24,7 @@ func TestEvalMatchSnapshot_NoStore(t *testing.T) {
 
 func TestEvalMatchSnapshot_WholeDoc(t *testing.T) {
 	doc := map[string]any{"kind": "Deployment", "replicas": 3}
-	store := newStore(t, false)
+	store := newStore(t, snapshot.CreateMissing)
 	ctx := EvalContext{
 		Doc:           doc,
 		SnapshotStore: store,
@@ -47,7 +47,7 @@ func TestEvalMatchSnapshot_WholeDoc(t *testing.T) {
 }
 
 func TestEvalMatchSnapshot_Mismatch(t *testing.T) {
-	store := newStore(t, false)
+	store := newStore(t, snapshot.CreateMissing)
 	ctx := EvalContext{
 		SnapshotStore: store,
 		SuiteName:     "suite",
@@ -76,7 +76,7 @@ func TestEvalMatchSnapshot_Mismatch(t *testing.T) {
 func TestEvalMatchSnapshot_Update(t *testing.T) {
 	doc1 := map[string]any{"kind": "Deployment"}
 	doc2 := map[string]any{"kind": "Service"}
-	store := newStore(t, false)
+	store := newStore(t, snapshot.CreateMissing)
 	ctx := EvalContext{
 		Doc:           doc1,
 		SnapshotStore: store,
@@ -89,7 +89,7 @@ func TestEvalMatchSnapshot_Update(t *testing.T) {
 	evalMatchSnapshot(&dsl.MatchSnapshotSpec{}, ctx)
 
 	// Update mode: overwrite with new doc — should pass.
-	store.Update = true
+	store.Mode = snapshot.Overwrite
 	ctx.Doc = doc2
 	r := evalMatchSnapshot(&dsl.MatchSnapshotSpec{}, ctx)
 	if !r.Pass {
@@ -97,7 +97,7 @@ func TestEvalMatchSnapshot_Update(t *testing.T) {
 	}
 
 	// Verify the snapshot now matches doc2.
-	store.Update = false
+	store.Mode = snapshot.CompareOnly
 	r = evalMatchSnapshot(&dsl.MatchSnapshotSpec{}, ctx)
 	if !r.Pass {
 		t.Fatalf("after update, doc2 should match: %s", r.Message)
@@ -109,7 +109,7 @@ func TestEvalMatchSnapshot_PathBased(t *testing.T) {
 		"kind": "Deployment",
 		"spec": map[string]any{"replicas": 3},
 	}
-	store := newStore(t, false)
+	store := newStore(t, snapshot.CreateMissing)
 	ctx := EvalContext{
 		Doc:           doc,
 		SnapshotStore: store,
@@ -134,7 +134,7 @@ func TestEvalMatchSnapshot_PathBased(t *testing.T) {
 
 func TestEvalMatchSnapshot_PathNotFound(t *testing.T) {
 	doc := map[string]any{"kind": "Deployment"}
-	store := newStore(t, false)
+	store := newStore(t, snapshot.CreateMissing)
 	ctx := EvalContext{
 		Doc:           doc,
 		SnapshotStore: store,
@@ -150,7 +150,7 @@ func TestEvalMatchSnapshot_PathNotFound(t *testing.T) {
 }
 
 func TestEvalMatchSnapshot_NilDocWithPath(t *testing.T) {
-	store := newStore(t, false)
+	store := newStore(t, snapshot.CreateMissing)
 	ctx := EvalContext{
 		Doc:           nil,
 		SnapshotStore: store,
@@ -166,7 +166,7 @@ func TestEvalMatchSnapshot_NilDocWithPath(t *testing.T) {
 }
 
 func TestEvalMatchSnapshot_HelperOutput(t *testing.T) {
-	store := newStore(t, false)
+	store := newStore(t, snapshot.CreateMissing)
 	ctx := EvalContext{
 		IsHelperTest:  true,
 		HelperOutput:  "myrepo/myapp:v1.0",
@@ -185,5 +185,17 @@ func TestEvalMatchSnapshot_HelperOutput(t *testing.T) {
 	r = evalMatchSnapshot(&dsl.MatchSnapshotSpec{}, ctx)
 	if !r.Pass {
 		t.Fatalf("second helper snapshot should match: %s", r.Message)
+	}
+}
+
+func TestEvalMatchSnapshot_CompareOnlyFailsOnMissing(t *testing.T) {
+	ctx := EvalContext{
+		Doc:           map[string]any{"kind": "Deployment"},
+		SnapshotStore: newStore(t, snapshot.CompareOnly),
+		SuiteName:     "suite",
+		TestName:      "test",
+	}
+	if r := evalMatchSnapshot(&dsl.MatchSnapshotSpec{}, ctx); r.Pass {
+		t.Fatal("CompareOnly must fail on a missing snapshot instead of creating it")
 	}
 }
