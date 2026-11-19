@@ -10,14 +10,27 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Mode decides what Match does with a missing or differing snapshot.
+type Mode int
+
+const (
+	// CreateMissing records snapshots that do not exist yet and compares the
+	// rest: the local authoring loop.
+	CreateMissing Mode = iota
+	// CompareOnly fails on a missing snapshot, so CI never passes by writing
+	// the golden file it was meant to check.
+	CompareOnly
+	// Overwrite rewrites every snapshot with the current value (`-u`).
+	Overwrite
+)
+
 // Store manages snapshot files on disk.
 // Snapshots are stored as YAML files in Dir, one file per suite,
 // with a top-level map from snapshot key to normalized document value.
 type Store struct {
 	// Dir is the directory where snapshot files are written, e.g. "tests/snapshots".
-	Dir string
-	// Update, when true, causes existing snapshots to be overwritten on match.
-	Update bool
+	Dir  string
+	Mode Mode
 }
 
 // Key returns the snapshot key for a given suite, test name, and assertion index.
@@ -25,10 +38,8 @@ func Key(suiteName, testName string, assertIdx int) string {
 	return fmt.Sprintf("%s/%s[%d]", suiteName, testName, assertIdx)
 }
 
-// Match checks whether value matches the stored snapshot for key.
-// If no snapshot exists for key, it writes one and returns (true, "").
-// If Update is true, it overwrites the snapshot and returns (true, "").
-// On mismatch, it returns (false, diff message).
+// Match checks whether value matches the stored snapshot for key, writing it
+// instead when the Mode says so. On mismatch it returns (false, diff message).
 func (s *Store) Match(key string, value any) (bool, string) {
 	suiteName := suiteFromKey(key)
 	file := s.snapshotFile(suiteName)
@@ -46,7 +57,10 @@ func (s *Store) Match(key string, value any) (bool, string) {
 	normalized := Normalize(value)
 
 	existing, exists := snapshots[key]
-	if !exists || s.Update {
+	if !exists && s.Mode == CompareOnly {
+		return false, fmt.Sprintf("matchSnapshot: no snapshot %q in %s; run `vigie test -u` locally and commit it (snapshots are not created in CI)", key, file)
+	}
+	if !exists || s.Mode == Overwrite {
 		// Write the snapshot.
 		snapshots[key] = normalized
 		if writeErr := s.save(file, snapshots); writeErr != nil {
