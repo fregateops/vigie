@@ -41,12 +41,15 @@ func TestRunDocumentScope_HardcodedNamespace(t *testing.T) {
 		{"kind": "Deployment", "metadata": map[string]any{"name": "no-ns"}},
 		{"kind": "Service", "metadata": map[string]any{"name": "bad", "namespace": "production"}},
 	}
-	got := runDocumentScope(lint.Context{RenderedDocs: docs}, "template-best-practices_hardcoded-namespace", def)
+	got := runDocumentScope(lint.Context{RenderedDocs: fromTemplate(docs)}, "template-best-practices_hardcoded-namespace", def)
 	if len(got) != 1 {
 		t.Fatalf("want 1 finding, got %d: %+v", len(got), got)
 	}
 	if got[0].Message != "Service/bad: hardcoded namespace" {
 		t.Errorf("unexpected message: %q", got[0].Message)
+	}
+	if got[0].File != testTemplate {
+		t.Errorf("finding file = %q, want the template that rendered the doc %q", got[0].File, testTemplate)
 	}
 }
 
@@ -79,7 +82,7 @@ func TestRunContainerScope_MissingLimits(t *testing.T) {
 		// Non-Deployment kind ignored.
 		{"kind": "ConfigMap", "metadata": map[string]any{"name": "skip"}},
 	}
-	got := runContainerScope(lint.Context{RenderedDocs: docs}, "template-best-practices_missing-resource-limits", def)
+	got := runContainerScope(lint.Context{RenderedDocs: fromTemplate(docs)}, "template-best-practices_missing-resource-limits", def)
 	if len(got) != 2 {
 		t.Fatalf("want 2 findings, got %d", len(got))
 	}
@@ -99,13 +102,13 @@ func TestRunRemovedAPIScope_VersionFilter(t *testing.T) {
 	}
 
 	// No target version → both flagged.
-	got := runRemovedAPIScope(lint.Context{RenderedDocs: docs}, "deprecation_removed-api", def)
+	got := runRemovedAPIScope(lint.Context{RenderedDocs: fromTemplate(docs)}, "deprecation_removed-api", def)
 	if len(got) != 2 {
 		t.Errorf("no target: want 2 findings, got %d", len(got))
 	}
 
 	// Target 1.23 → Ingress (removed 1.22) flagged, CronJob (removed 1.25) not.
-	got = runRemovedAPIScope(lint.Context{RenderedDocs: docs, KubeVersion: "1.23"}, "deprecation_removed-api", def)
+	got = runRemovedAPIScope(lint.Context{RenderedDocs: fromTemplate(docs), KubeVersion: "1.23"}, "deprecation_removed-api", def)
 	if len(got) != 1 {
 		t.Fatalf("1.23: want 1 finding, got %d: %+v", len(got), got)
 	}
@@ -114,8 +117,18 @@ func TestRunRemovedAPIScope_VersionFilter(t *testing.T) {
 	}
 
 	// Target 1.20 → neither flagged.
-	got = runRemovedAPIScope(lint.Context{RenderedDocs: docs, KubeVersion: "1.20"}, "deprecation_removed-api", def)
+	got = runRemovedAPIScope(lint.Context{RenderedDocs: fromTemplate(docs), KubeVersion: "1.20"}, "deprecation_removed-api", def)
 	if len(got) != 0 {
 		t.Errorf("1.20: want 0 findings, got %d", len(got))
 	}
+}
+
+const testTemplate = "templates/workload.yaml"
+
+func fromTemplate(objs []map[string]any) []lint.RenderedDoc {
+	docs := make([]lint.RenderedDoc, len(objs))
+	for i, obj := range objs {
+		docs[i] = lint.RenderedDoc{Source: testTemplate, Object: obj}
+	}
+	return docs
 }
