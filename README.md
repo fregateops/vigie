@@ -269,7 +269,7 @@ YAML as a nested sequence and fails to load.
 | `matchSchema: { path, schema }` | Value validates against an inline JSON Schema fragment |
 | `hasDocuments: <int>` | Number of rendered documents equals N |
 | `failedTemplate: { errorPattern }` | Render failed, optionally matching a regex |
-| `matchSnapshot: { path }` | Value matches on-disk snapshot (created on first local run; a missing snapshot fails in CI) |
+| `matchSnapshot: { path }` | Value matches the on-disk snapshot; a missing one fails. `vigie test -u` records them |
 | `allOf` / `anyOf: [...]` | All / at least one nested assertion must pass |
 | `expr: <CEL>` | CEL expression over `doc`/`resources`/`matrix`/`case` evaluates to true |
 
@@ -407,7 +407,7 @@ vigie test [chart]            render + assert; --cluster raises fidelity to a li
   --file <path>               run a single test file instead of discovering all
   --tests <dir>               discovery root (default: <chart>/tests)
   --match <regex>             run only tests whose display name matches
-  -u, --update-snapshots      rewrite every snapshot (missing ones are created locally, fail in CI)
+  -u, --update-snapshots      record snapshots (create missing, rewrite changed); otherwise only compare
   --fail-fast                 cancel queued tests after the first failure
   --schema                    run the per-test kubeconform pass (default: true; --schema=false skips)
   --kube-version <a,b,…>      Kubernetes version(s): template matrixes all, cluster uses the first

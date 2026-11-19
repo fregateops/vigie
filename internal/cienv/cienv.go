@@ -34,12 +34,3 @@ func Detect() Kind {
 	}
 	return KindNone
 }
-
-// IsCI reports whether vigie runs in CI: a detected provider, or the generic
-// CI=true most providers set. VIGIE_CI, when set, decides alone.
-func IsCI() bool {
-	if os.Getenv("VIGIE_CI") != "" {
-		return Detect() != KindNone
-	}
-	return Detect() != KindNone || os.Getenv("CI") == "true"
-}

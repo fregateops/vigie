@@ -90,7 +90,7 @@ func init() {
 	testCmd.Flags().BoolVar(&flagTestFailFast, "fail-fast", false, "Cancel queued tests after the first failure")
 	testCmd.Flags().BoolVar(&flagTestKeepCluster, "keep-cluster", false, "Keep the cluster running after the suite for debugging (node-backed backends only)")
 	testCmd.Flags().StringVar(&flagTestMatch, "match", "", "Run only tests whose display name matches this regex")
-	testCmd.Flags().BoolVarP(&flagTestUpdateSnapshots, "update-snapshots", "u", false, "Rewrite every snapshot with the current output (missing snapshots are created locally, but fail in CI)")
+	testCmd.Flags().BoolVarP(&flagTestUpdateSnapshots, "update-snapshots", "u", false, "Record snapshots from the current output, creating missing ones and rewriting changed ones (without it, snapshots are only compared)")
 	testCmd.Flags().StringVar(&flagTestKindBinary, "kind-binary", "", "Path to the kind CLI (default: resolve from PATH, then the vigie cache, then download)")
 	testCmd.Flags().StringVar(&flagTestK3dBinary, "k3d-binary", "", "Path to the k3d CLI (default: resolve from PATH, then the vigie cache, then download)")
 	testCmd.Flags().BoolVar(&flagTestDownloadTools, "download-tools", false, "Download a missing kind/k3d CLI without prompting (for CI/automation; also VIGIE_AUTO_DOWNLOAD)")
@@ -393,15 +393,9 @@ func displayTestsRoot(chartPath, testsDir string) string {
 	return filepath.Join(chartPath, testsDir)
 }
 
-// snapshotMode is -u's overwrite, else compare-only in CI so a missing
-// snapshot fails instead of being written and passing.
 func snapshotMode() snapshot.Mode {
-	switch {
-	case flagTestUpdateSnapshots:
-		return snapshot.Overwrite
-	case cienv.IsCI():
-		return snapshot.CompareOnly
-	default:
-		return snapshot.CreateMissing
+	if flagTestUpdateSnapshots {
+		return snapshot.Update
 	}
+	return snapshot.Compare
 }

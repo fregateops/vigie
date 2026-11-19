@@ -10,18 +10,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Mode decides what Match does with a missing or differing snapshot.
+// Mode decides whether Match may write snapshots.
 type Mode int
 
 const (
-	// CreateMissing records snapshots that do not exist yet and compares the
-	// rest: the local authoring loop.
-	CreateMissing Mode = iota
-	// CompareOnly fails on a missing snapshot, so CI never passes by writing
-	// the golden file it was meant to check.
-	CompareOnly
-	// Overwrite rewrites every snapshot with the current value (`-u`).
-	Overwrite
+	// Compare only compares: a missing snapshot fails, nothing is written.
+	Compare Mode = iota
+	// Update records the current value, creating missing snapshots and
+	// rewriting changed ones. Only an explicit request (`-u`) selects it.
+	Update
 )
 
 // Store manages snapshot files on disk.
@@ -38,8 +35,8 @@ func Key(suiteName, testName string, assertIdx int) string {
 	return fmt.Sprintf("%s/%s[%d]", suiteName, testName, assertIdx)
 }
 
-// Match checks whether value matches the stored snapshot for key, writing it
-// instead when the Mode says so. On mismatch it returns (false, diff message).
+// Match checks whether value matches the stored snapshot for key; in Update
+// mode it records value instead. On mismatch it returns (false, diff message).
 func (s *Store) Match(key string, value any) (bool, string) {
 	suiteName := suiteFromKey(key)
 	file := s.snapshotFile(suiteName)
@@ -57,10 +54,7 @@ func (s *Store) Match(key string, value any) (bool, string) {
 	normalized := Normalize(value)
 
 	existing, exists := snapshots[key]
-	if !exists && s.Mode == CompareOnly {
-		return false, fmt.Sprintf("matchSnapshot: no snapshot %q in %s; run `vigie test -u` locally and commit it (snapshots are not created in CI)", key, file)
-	}
-	if !exists || s.Mode == Overwrite {
+	if s.Mode == Update {
 		// Write the snapshot.
 		snapshots[key] = normalized
 		if writeErr := s.save(file, snapshots); writeErr != nil {
@@ -69,7 +63,10 @@ func (s *Store) Match(key string, value any) (bool, string) {
 		return true, ""
 	}
 
-	// Compare.
+	if !exists {
+		return false, fmt.Sprintf("matchSnapshot: no snapshot %q in %s; run `vigie test -u` to record it, then review and commit it", key, file)
+	}
+
 	gotYAML, err1 := marshalSorted(normalized)
 	wantYAML, err2 := marshalSorted(existing)
 	if err1 != nil || err2 != nil {
