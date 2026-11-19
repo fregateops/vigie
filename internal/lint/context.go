@@ -24,6 +24,13 @@ type Finding struct {
 	HelpURI  string
 }
 
+// RenderedDoc is a rendered manifest and the template (relative to the chart
+// root) that produced it.
+type RenderedDoc struct {
+	Source string
+	Object map[string]any
+}
+
 // Context carries everything a lint rule needs to inspect.
 type Context struct {
 	ChartPath string
@@ -31,7 +38,10 @@ type Context struct {
 	// ChartMeta is chart metadata as a plain map[string]any, suitable for
 	// CEL bindings. Populated by the ContextBuilder when the context is built.
 	ChartMeta    map[string]any
-	RenderedDocs []map[string]any
+	RenderedDocs []RenderedDoc
+	// RenderErr is why the chart could not be rendered; template rules then
+	// have no documents to inspect.
+	RenderErr error
 	// KubeVersion is the target Kubernetes version (e.g. "1.27") used by
 	// version-aware rules such as the deprecation table. Empty means
 	// "unspecified" — version-filtered rules treat this as "report all".

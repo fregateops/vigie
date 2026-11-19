@@ -32,7 +32,8 @@ func runChartScope(ctx lint.Context, id string, def RuleDef) []lint.Finding {
 // runDocumentScope evaluates the rule per rendered document.
 func runDocumentScope(ctx lint.Context, id string, def RuleDef) []lint.Finding {
 	var findings []lint.Finding
-	for _, doc := range ctx.RenderedDocs {
+	for _, rd := range ctx.RenderedDocs {
+		doc := rd.Object
 		bindings := map[string]any{
 			"doc":             doc,
 			"renderNamespace": "default",
@@ -44,7 +45,7 @@ func runDocumentScope(ctx lint.Context, id string, def RuleDef) []lint.Finding {
 		findings = append(findings, lint.Finding{
 			RuleID:   id,
 			Severity: lint.Severity(def.Severity),
-			File:     "templates/",
+			File:     rd.Source,
 			Message:  interpolate(def.Message, bindings),
 			HelpURI:  def.HelpURI,
 		})
@@ -60,7 +61,8 @@ func runContainerScope(ctx lint.Context, id string, def RuleDef) []lint.Finding 
 		kinds[k] = true
 	}
 	var findings []lint.Finding
-	for _, doc := range ctx.RenderedDocs {
+	for _, rd := range ctx.RenderedDocs {
+		doc := rd.Object
 		kind, _ := doc["kind"].(string)
 		if len(kinds) > 0 && !kinds[kind] {
 			continue
@@ -77,7 +79,7 @@ func runContainerScope(ctx lint.Context, id string, def RuleDef) []lint.Finding 
 			findings = append(findings, lint.Finding{
 				RuleID:   id,
 				Severity: lint.Severity(def.Severity),
-				File:     "templates/",
+				File:     rd.Source,
 				Message:  interpolate(def.Message, bindings),
 				HelpURI:  def.HelpURI,
 			})
@@ -121,7 +123,8 @@ func runRemovedAPIScope(ctx lint.Context, id string, def RuleDef) []lint.Finding
 	}
 
 	var findings []lint.Finding
-	for _, doc := range ctx.RenderedDocs {
+	for _, rd := range ctx.RenderedDocs {
+		doc := rd.Object
 		av, _ := doc["apiVersion"].(string)
 		kind, _ := doc["kind"].(string)
 		entry, ok := index[key{av, kind}]
@@ -132,7 +135,7 @@ func runRemovedAPIScope(ctx lint.Context, id string, def RuleDef) []lint.Finding
 		findings = append(findings, lint.Finding{
 			RuleID:   id,
 			Severity: lint.Severity(def.Severity),
-			File:     "templates/",
+			File:     rd.Source,
 			Message: fmt.Sprintf(
 				"%s/%s uses removed apiVersion %q (removed in %s %s; use %s)",
 				kind, name, av, context, entry.RemovedIn, entry.Replacement,

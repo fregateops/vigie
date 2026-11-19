@@ -3,9 +3,13 @@ package lint
 import (
 	"fmt"
 	"log/slog"
+	"path"
 
 	"github.com/fregateops/vigie/internal/config"
 )
+
+// RenderFailedRuleID tags the finding raised when the chart does not render.
+const RenderFailedRuleID = "render-failed"
 
 // Result is the outcome of linting a single chart.
 type Result struct {
@@ -62,6 +66,15 @@ func Run(chartPath string, cfg *config.LintConfig, builder ContextBuilder, ruleL
 		result.Findings = append(result.Findings, applyIgnore(helmFindings, cfg.Ignore)...)
 	}
 
+	if ctx.RenderErr != nil {
+		result.Findings = append(result.Findings, Finding{
+			RuleID:   RenderFailedRuleID,
+			Severity: SeverityError,
+			File:     "templates/",
+			Message:  fmt.Sprintf("chart failed to render, so template rules could not run: %v", ctx.RenderErr),
+		})
+	}
+
 	ranRules := 0
 	for _, rule := range ruleList {
 		if !enabled[rule.SetName()] || cfg.IsRuleDisabled(rule.ID()) {
@@ -109,8 +122,7 @@ func isIgnored(f Finding, ignores []config.IgnoreRule) bool {
 	return false
 }
 
-func matchGlob(pattern, path string) bool {
-	// Simple suffix glob: "templates/jobs/*.yaml" matches "templates/jobs/migrate.yaml"
-	// Exact match only for now; full glob matching can be added later.
-	return pattern == path
+func matchGlob(pattern, file string) bool {
+	ok, _ := path.Match(pattern, file)
+	return ok
 }

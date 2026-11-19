@@ -43,20 +43,22 @@ func (a *Adapter) PrepareContext(chartPath string, cfg *config.LintConfig) (lint
 
 	kubeVer := firstNonEmpty(cfg.KubeVersions)
 
-	res, _ := render.Render(render.Request{ChartPath: chartPath, KubeVersion: kubeVer})
-	var docs []map[string]any
-	if res != nil {
-		docs = res.Objects()
+	ctx := lint.Context{
+		ChartPath:   chartPath,
+		Chart:       chrt,
+		ChartMeta:   chartMetaToMap(chrt.Metadata),
+		KubeVersion: kubeVer,
+		Cfg:         cfg,
 	}
-
-	return lint.Context{
-		ChartPath:    chartPath,
-		Chart:        chrt,
-		ChartMeta:    chartMetaToMap(chrt.Metadata),
-		RenderedDocs: docs,
-		KubeVersion:  kubeVer,
-		Cfg:          cfg,
-	}, nil
+	res, err := render.Render(render.Request{ChartPath: chartPath, KubeVersion: kubeVer})
+	if err != nil {
+		ctx.RenderErr = err
+		return ctx, nil
+	}
+	for _, d := range res.Docs {
+		ctx.RenderedDocs = append(ctx.RenderedDocs, lint.RenderedDoc{Source: d.Source, Object: d.Object})
+	}
+	return ctx, nil
 }
 
 // LintFindings runs `helm lint` against the chart and converts its messages
