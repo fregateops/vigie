@@ -186,14 +186,14 @@ func (r *applyRunner) run(parent context.Context) ([]SuiteResult, error) {
 		default:
 		}
 
-		sr, fileErr := r.runFile(runCtx, path)
-		if r.opts.FailFast && fileErr == nil && SuiteHasFailure(sr) {
+		sr := r.runFile(runCtx, path)
+		if r.opts.FailFast && SuiteHasFailure(sr) {
 			failFastOnce.Do(func() {
 				slog.Debug("apply: fail-fast triggered", "file", path)
 				cancelRun()
 			})
 		}
-		return sr, fileErr
+		return sr, nil
 	})
 }
 
@@ -202,13 +202,13 @@ func (r *applyRunner) run(parent context.Context) ([]SuiteResult, error) {
 // setup/teardown hooks) -> afterAll hooks -> teardown scoped deps. Suites that
 // declare no integration-tier features (no `dependencies:`/`beforeAll:`/...)
 // fall through the install + hook stages with empty payloads.
-func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult, error) {
+func (r *applyRunner) runFile(ctx context.Context, filePath string) SuiteResult {
 	slog.Debug("loading test file", "file", filePath)
 	start := time.Now()
 
 	suite, expanded, err := loadSuite(filePath)
 	if err != nil {
-		return unloadedSuite(filePath, err, time.Since(start)), nil
+		return unloadedSuite(filePath, err, time.Since(start))
 	}
 	slog.Debug("parsed suite", "file", filePath, "tier", suite.SuiteTier(), "suite", suite.SuiteName)
 
@@ -216,7 +216,7 @@ func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult
 
 	chrt, err := loader.Load(r.opts.ChartPath)
 	if err != nil {
-		return SuiteResult{File: filePath, Suite: suite.SuiteName}, fmt.Errorf("setup error: loading chart %s: %w", r.opts.ChartPath, err)
+		return failedSetup(sr, fmt.Errorf("loading chart %s: %w", r.opts.ChartPath, err), start)
 	}
 
 	store := &snapshot.Store{Dir: resolveSnapshotDir(r.opts.SnapshotDir, r.opts.ChartPath), Mode: r.opts.SnapshotMode}
@@ -231,7 +231,7 @@ func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult
 			"file", filePath, "backend", r.opts.BackendType, "reason", reason)
 		sr.Results = skippedSuite(suite, expanded, r.matchRE, reason)
 		sr.Duration = time.Since(start)
-		return sr, nil
+		return sr
 	}
 
 	clusterDeps, suiteDeps, testDeps := splitDepsByScope(suite.Dependencies)
@@ -240,7 +240,7 @@ func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult
 		Parallelism: r.opts.Parallelism, BaseDir: baseDir,
 	})
 	if err != nil {
-		return sr, fmt.Errorf("setup error: installing cluster-scoped deps: %w", err)
+		return failedSetup(sr, fmt.Errorf("installing cluster-scoped deps: %w", err), start)
 	}
 	// Cluster-scoped deps persist across files for cache reuse; their teardown
 	// will be tracked in a future change.
@@ -253,7 +253,7 @@ func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult
 		Parallelism: r.opts.Parallelism, BaseDir: baseDir,
 	})
 	if err != nil {
-		return sr, fmt.Errorf("setup error: installing suite-scoped deps: %w", err)
+		return failedSetup(sr, fmt.Errorf("installing suite-scoped deps: %w", err), start)
 	}
 	defer func() {
 		if r.opts.KeepCluster {
@@ -272,7 +272,7 @@ func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult
 		Suite:      suite.SuiteName,
 	}
 	if err := RunHooks(ctx, "beforeAll", suite.BeforeAll, suiteEnv); err != nil {
-		return sr, fmt.Errorf("setup error: beforeAll hook: %w", err)
+		return failedSetup(sr, fmt.Errorf("beforeAll hook: %w", err), start)
 	}
 	defer func() {
 		afterCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -315,7 +315,19 @@ func (r *applyRunner) runFile(ctx context.Context, filePath string) (SuiteResult
 	sr.Duration = time.Since(start)
 	slog.Debug("suite finished",
 		"suite", suite.SuiteName, "tests", len(sr.Results), "duration", sr.Duration)
-	return sr, nil
+	return sr
+}
+
+// failedSetup reports a suite whose setup failed as one failed test, so the
+// run goes on with the other files and still produces a report.
+func failedSetup(sr SuiteResult, err error, start time.Time) SuiteResult {
+	sr.Results = append(sr.Results, TestResult{
+		SuiteName: sr.Suite,
+		TestName:  "suite setup",
+		Failures:  []string{fmt.Sprintf("        → %v", err)},
+	})
+	sr.Duration = time.Since(start)
+	return sr
 }
 
 // runTest renders the chart, installs it into a fresh per-test namespace,
