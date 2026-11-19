@@ -575,7 +575,7 @@ func selectAllDocs(target *dsl.TargetSpec, docs []map[string]any) []map[string]a
 // selectDoc picks the target document for an assertion.
 // Returns (doc, diagnosticMessage).
 func selectDoc(a dsl.Assertion, target *dsl.TargetSpec, docs []map[string]any, renderErr error) (map[string]any, string) {
-	if a.FailedTemplate != nil || a.HasDocuments != nil {
+	if !a.ReadsRenderedDocument() {
 		return nil, ""
 	}
 
