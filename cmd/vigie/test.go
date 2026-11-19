@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/fregateops/vigie/internal/cienv"
@@ -31,6 +32,7 @@ var (
 	flagTestCluster         string
 	flagTestKubeconfig      string
 	flagTestKubeContext     string
+	flagTestLoadImages      []string
 	flagTestFailFast        bool
 	flagTestKeepCluster     bool
 	flagTestMatch           string
@@ -43,6 +45,9 @@ var (
 // clusterNone is the default --cluster value: run the in-process template tier
 // (render + assert + kubeconform), no cluster backend.
 const clusterNone = "none"
+
+// imageLoadingBackends provision their own nodes, so vigie can load images into them.
+var imageLoadingBackends = []string{"kind", "k3d"}
 
 // exitWarnings is the exit code for a run that produced only warnings (e.g. no
 // tests executed) - distinct from setup (2)/user (3) errors so CI can tell
@@ -91,6 +96,7 @@ func init() {
 	testCmd.Flags().StringSliceVar(&flagTestKubeVersions, "kube-version", nil, "Kubernetes version(s), repeatable: template tier matrixes kubeconform over all; cluster tier uses the first (default: 1.36.1)")
 	testCmd.Flags().StringVar(&flagTestCluster, "cluster", clusterNone, "Cluster backend for the apply tier: none|envtest|simulated|kind|k3d|kubeconfig (default none = template tier)")
 	testCmd.Flags().StringVar(&flagTestKubeconfig, "kubeconfig", "", "Path to kubeconfig for --cluster kubeconfig (overrides test.cluster.kubeconfig.path)")
+	testCmd.Flags().StringArrayVar(&flagTestLoadImages, "load-image", nil, "Local container image to load into the kind/k3d cluster before tests run, e.g. one CI just built (repeatable)")
 	testCmd.Flags().StringVar(&flagTestKubeContext, "kube-context", "", "Kubeconfig context for --cluster kubeconfig (overrides test.cluster.kubeconfig.context; default: the file's current-context)")
 	testCmd.Flags().BoolVar(&flagTestFailFast, "fail-fast", false, "Cancel queued tests after the first failure")
 	testCmd.Flags().BoolVar(&flagTestKeepCluster, "keep-cluster", false, "Keep the cluster running after the suite for debugging (node-backed backends only)")
@@ -112,6 +118,10 @@ func runTestCmd(cmd *cobra.Command, args []string) error {
 		if err := config.ValidateKubeVersion(fmt.Sprintf("--kube-version[%d]", idx), ver); err != nil {
 			exitErr(3, "%v", err)
 		}
+	}
+	if len(flagTestLoadImages) > 0 && !slices.Contains(imageLoadingBackends, flagTestCluster) {
+		exitErr(3, "--load-image needs a node-backed cluster (--cluster %s); --cluster %s has no nodes vigie can load images into",
+			strings.Join(imageLoadingBackends, "|"), flagTestCluster)
 	}
 
 	cfg, err := config.Load(chartPath)
@@ -253,6 +263,7 @@ func runTests(ctx context.Context, chartPath string, cfg *config.Config, files [
 		Match:        flagTestMatch,
 		FailFast:     flagTestFailFast,
 		KeepCluster:  flagTestKeepCluster,
+		Images:       flagTestLoadImages,
 	})
 }
 

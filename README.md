@@ -63,6 +63,10 @@ and terminal variables, `KUBECONFIG` (pinned to the tested cluster) and `VIGIE_S
 secret, must be named in the command's `passEnv:` list. On timeout or Ctrl-C the command's
 whole process group is killed.
 
+To test an image your CI job just built without pushing it anywhere, pass
+`--load-image <image>` (repeatable) with `--cluster kind|k3d`: vigie loads it into the cluster
+nodes before any test runs, so the chart can use it with `pullPolicy: Never`.
+
 Backend-specific provisioning flags go through `test.cluster.<backend>.extraArgs` in
 `.vigie.yaml` (e.g. a kind `--config` for a multi-node topology). Downloaded binaries are statically-linked
 Go executables that run on NixOS as-is; a `nix profile install kind k3d` is picked up from
@@ -431,6 +435,7 @@ vigie test [chart]            render + assert; --cluster raises fidelity to a li
   --kubeconfig <path>         kubeconfig for --cluster kubeconfig
   --kube-context <name>       kubeconfig context to test against (default: current-context)
   --keep-cluster              keep the cluster after the run (node-backed backends)
+  --load-image <image>        load a local image into the kind/k3d nodes first (repeatable)
   --kind-binary <path>        kind CLI to use (default: PATH, then vigie cache, then download)
   --k3d-binary <path>         k3d CLI to use (default: PATH, then vigie cache, then download)
   --download-tools            download a missing kind/k3d CLI unattended (CI/automation; also VIGIE_AUTO_DOWNLOAD)

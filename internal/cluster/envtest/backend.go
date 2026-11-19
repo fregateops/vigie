@@ -70,7 +70,9 @@ func (b *Backend) Kubeconfig() string { return "" }
 // LoadImages is a no-op because envtest has no node to load images onto.
 // Tests that depend on cluster-side image pulls should use a node-backed
 // backend (kind, k3d).
-func (b *Backend) LoadImages(_ context.Context, _ []string) error { return nil }
+func (b *Backend) LoadImages(_ context.Context, _ []string) error {
+	return errors.New("envtest runs no pods, so it has no nodes to load images into")
+}
 
 // Stop tears down the embedded apiserver + etcd. Safe to call when Start was
 // never called or returned an error.
