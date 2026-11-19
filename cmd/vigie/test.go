@@ -30,6 +30,7 @@ var (
 	flagTestKubeVersions    []string
 	flagTestCluster         string
 	flagTestKubeconfig      string
+	flagTestKubeContext     string
 	flagTestFailFast        bool
 	flagTestKeepCluster     bool
 	flagTestMatch           string
@@ -90,6 +91,7 @@ func init() {
 	testCmd.Flags().StringSliceVar(&flagTestKubeVersions, "kube-version", nil, "Kubernetes version(s), repeatable: template tier matrixes kubeconform over all; cluster tier uses the first (default: 1.36.1)")
 	testCmd.Flags().StringVar(&flagTestCluster, "cluster", clusterNone, "Cluster backend for the apply tier: none|envtest|simulated|kind|k3d|kubeconfig (default none = template tier)")
 	testCmd.Flags().StringVar(&flagTestKubeconfig, "kubeconfig", "", "Path to kubeconfig for --cluster kubeconfig (overrides test.cluster.kubeconfig.path)")
+	testCmd.Flags().StringVar(&flagTestKubeContext, "kube-context", "", "Kubeconfig context for --cluster kubeconfig (overrides test.cluster.kubeconfig.context; default: the file's current-context)")
 	testCmd.Flags().BoolVar(&flagTestFailFast, "fail-fast", false, "Cancel queued tests after the first failure")
 	testCmd.Flags().BoolVar(&flagTestKeepCluster, "keep-cluster", false, "Keep the cluster running after the suite for debugging (node-backed backends only)")
 	testCmd.Flags().StringVar(&flagTestMatch, "match", "", "Run only tests whose display name matches this regex")
@@ -275,6 +277,7 @@ func resolveClusterConfig(cfg *config.Config) cluster.Config {
 		resolved.K3dBinary = configured.K3d.Binary
 	case "kubeconfig":
 		resolved.Kubeconfig = configured.Kubeconfig.Path
+		resolved.KubeContext = configured.Kubeconfig.Context
 	}
 
 	if len(flagTestKubeVersions) > 0 {
@@ -286,6 +289,9 @@ func resolveClusterConfig(cfg *config.Config) cluster.Config {
 	}
 	if flagTestKubeconfig != "" {
 		resolved.Kubeconfig = flagTestKubeconfig
+	}
+	if flagTestKubeContext != "" {
+		resolved.KubeContext = flagTestKubeContext
 	}
 	if flagTestKindBinary != "" {
 		resolved.KindBinary = flagTestKindBinary

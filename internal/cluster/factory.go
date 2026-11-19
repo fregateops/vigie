@@ -50,7 +50,7 @@ func New(cfg Config) (Backend, error) {
 		if cfg.Kubeconfig == "" {
 			return nil, fmt.Errorf("kubeconfig backend requires a non-empty kubeconfig path")
 		}
-		return kubeconfig.New(cfg.Kubeconfig), nil
+		return kubeconfig.New(cfg.Kubeconfig, cfg.KubeContext), nil
 	default:
 		return nil, fmt.Errorf("unknown cluster backend %q: valid values are envtest, kind, k3d, kubeconfig", backendType)
 	}

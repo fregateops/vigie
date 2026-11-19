@@ -422,6 +422,7 @@ vigie test [chart]            render + assert; --cluster raises fidelity to a li
   --kube-version <a,b,…>      Kubernetes version(s): template matrixes all, cluster uses the first
   --snapshot-dir <dir>        snapshot directory (default: <chart>/tests/snapshots)
   --kubeconfig <path>         kubeconfig for --cluster kubeconfig
+  --kube-context <name>       kubeconfig context to test against (default: current-context)
   --keep-cluster              keep the cluster after the run (node-backed backends)
   --kind-binary <path>        kind CLI to use (default: PATH, then vigie cache, then download)
   --k3d-binary <path>         k3d CLI to use (default: PATH, then vigie cache, then download)
@@ -499,9 +500,10 @@ test:
       extraArgs: []          # e.g. ["-v", "/host:/node"]
     kubeconfig:
       path: /home/me/.kube/config   # no `~` expansion; required for --cluster kubeconfig
+      context: kind-dev             # default: the file's current-context
 ```
 
-CLI flags win over `.vigie.yaml`: `--kube-version`, `--kubeconfig`, `--kind-binary`, and
+CLI flags win over `.vigie.yaml`: `--kube-version`, `--kubeconfig`, `--kube-context`, `--kind-binary`, and
 `--k3d-binary` each override the selected backend's block. `--download-tools` has no config
 counterpart on purpose — whether a missing CLI may be fetched is an environment concern (TTY vs
 CI), not a per-chart one.

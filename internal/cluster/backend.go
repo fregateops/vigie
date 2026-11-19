@@ -53,6 +53,9 @@ type Config struct {
 	// Kubeconfig is the path to an external kubeconfig file. Only used when
 	// Type == "kubeconfig".
 	Kubeconfig string
+	// KubeContext selects the kubeconfig context (Type == "kubeconfig"); empty
+	// uses the file's current-context.
+	KubeContext string
 	// ExtraArgs are additional flags passed verbatim to the backend's server
 	// process (honoured by the node-backed backends kind and k3d).
 	ExtraArgs []string
