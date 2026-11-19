@@ -23,7 +23,6 @@ type ValueInputs struct {
 	SetLiteral map[string]string
 }
 
-// BuildValues merges the inputs into the user-supplied values map helm expects.
 func BuildValues(in ValueInputs) (map[string]any, error) {
 	vals := map[string]any{}
 	for _, file := range in.Files {

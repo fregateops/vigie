@@ -13,9 +13,7 @@ import (
 // defaultSchemaLocation is kubeconform's keyword for the upstream Kubernetes schemas.
 const defaultSchemaLocation = "default"
 
-// SchemaOptions configures a SchemaValidator.
 type SchemaOptions struct {
-	// KubeVersion pins the Kubernetes schemas, e.g. "1.30.0".
 	KubeVersion string
 	// Locations in kubeconform `-schema-location` syntax; empty = upstream only.
 	Locations []string
@@ -32,7 +30,6 @@ type SchemaError struct {
 	Message string
 }
 
-// SchemaReport is the outcome of validating a set of documents.
 type SchemaReport struct {
 	Errors []SchemaError
 	// UncheckedKinds lists the kinds no location had a schema for (typically
@@ -47,7 +44,6 @@ type SchemaValidator struct {
 	v validator.Validator
 }
 
-// NewSchemaValidator builds a validator from opts.
 func NewSchemaValidator(opts SchemaOptions) (*SchemaValidator, error) {
 	locations := make([]string, len(opts.Locations))
 	for i, loc := range opts.Locations {
@@ -78,11 +74,11 @@ func (s *SchemaValidator) Validate(docs []map[string]any) (SchemaReport, error) 
 	unchecked := map[string]bool{}
 	for _, doc := range docs {
 		docBytes, err := yaml.Marshal(doc)
+		kind, name := kindAndName(doc)
 		if err != nil {
-			return SchemaReport{}, fmt.Errorf("marshalling %s for schema validation: %w", docRef(doc), err)
+			return SchemaReport{}, fmt.Errorf("marshalling %s/%s for schema validation: %w", kind, name, err)
 		}
 		res := s.v.ValidateResource(resource.Resource{Bytes: docBytes})
-		kind, name := kindAndName(doc)
 		switch res.Status {
 		case validator.Invalid:
 			for _, ve := range res.ValidationErrors {
@@ -108,9 +104,4 @@ func kindAndName(doc map[string]any) (string, string) {
 	meta, _ := doc["metadata"].(map[string]any)
 	name, _ := meta["name"].(string)
 	return kind, name
-}
-
-func docRef(doc map[string]any) string {
-	kind, name := kindAndName(doc)
-	return kind + "/" + name
 }

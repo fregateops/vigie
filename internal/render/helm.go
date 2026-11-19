@@ -43,7 +43,6 @@ type Request struct {
 	Templates []string
 }
 
-// Document is one rendered YAML document and the template that produced it.
 type Document struct {
 	// Source is the template path relative to the chart root.
 	Source string
@@ -56,7 +55,6 @@ type Result struct {
 	Docs []Document
 }
 
-// Objects returns the rendered objects without their sources.
 func (r *Result) Objects() []map[string]any {
 	objs := make([]map[string]any, len(r.Docs))
 	for i, d := range r.Docs {
@@ -77,10 +75,8 @@ func Render(req Request) (*Result, error) {
 // RenderChart renders an already-loaded chart, resolving subchart
 // conditions/tags and checking declared dependencies exactly like `helm install`.
 func RenderChart(chrt *chart.Chart, req Request) (*Result, error) {
-	if chrt.Metadata.Dependencies != nil {
-		if err := action.CheckDependencies(chrt, chrt.Metadata.Dependencies); err != nil {
-			return nil, fmt.Errorf("%w (run `helm dependency build %s`)", err, req.ChartPath)
-		}
+	if err := action.CheckDependencies(chrt, chrt.Metadata.Dependencies); err != nil {
+		return nil, fmt.Errorf("%w (run `helm dependency build %s`)", err, req.ChartPath)
 	}
 	vals := req.Values
 	if vals == nil {

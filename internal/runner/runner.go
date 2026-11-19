@@ -222,7 +222,6 @@ func runFile(filePath string, opts Options, validators []versionedValidator, mat
 	return sr
 }
 
-// loadSuite parses a test file and expands its matrix/cases.
 func loadSuite(filePath string) (*dsl.Suite, []expandedTest, error) {
 	suite, err := dsl.ParseFile(filePath)
 	if err != nil {
@@ -253,7 +252,6 @@ func loadFailure(filePath string, err error, elapsed time.Duration) SuiteResult 
 	}
 }
 
-// skippedSuite reports every selected test of a suite as skipped for reason.
 func skippedSuite(suite *dsl.Suite, expanded []expandedTest, matchRE *regexp.Regexp, reason string) []TestResult {
 	var results []TestResult
 	for _, et := range expanded {
