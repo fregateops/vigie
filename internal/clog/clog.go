@@ -2,7 +2,7 @@
 //
 // Verbosity is mapped onto slog levels:
 //
-//	0 → silent (logger discards everything)
+//	0 → warnings and errors only (e.g. a teardown that leaked resources)
 //	1 → -v,  slog.LevelDebug
 //	≥2 → -vv, LevelTrace (one step finer than Debug)
 //
@@ -23,19 +23,19 @@ const LevelTrace slog.Level = slog.LevelDebug - 4
 
 // ConfigureDefault installs a slog logger as the process default.
 // Subsequent slog.Debug / slog.Info calls (and clog.Trace below) honor the
-// chosen verbosity. Pass 0 to silence all log output.
+// chosen verbosity.
 func ConfigureDefault(verbosity int) {
 	slog.SetDefault(New(verbosity, os.Stderr))
 }
 
 // New builds a logger without touching the process default. Exposed for tests.
 func New(verbosity int, w io.Writer) *slog.Logger {
-	if verbosity <= 0 {
-		return slog.New(slog.NewTextHandler(io.Discard, nil))
-	}
-	lvl := slog.LevelDebug
-	if verbosity >= 2 {
+	lvl := slog.LevelWarn
+	switch {
+	case verbosity >= 2:
 		lvl = LevelTrace
+	case verbosity == 1:
+		lvl = slog.LevelDebug
 	}
 	return slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{
 		Level: lvl,

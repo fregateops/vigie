@@ -555,7 +555,7 @@ func (r *applyRunner) deleteNamespace(name string) {
 		GracePeriodSeconds: &gp,
 	})
 	if err != nil && !apierrors.IsNotFound(err) {
-		slog.Debug("namespace delete failed", "namespace", name, "err", err)
+		slog.Warn("test namespace not deleted; delete it by hand", "namespace", name, "err", err)
 	}
 }
 
