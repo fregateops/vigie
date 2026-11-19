@@ -50,6 +50,12 @@ vigie prompts for confirmation; in CI or with piped stdin it never downloads and
 install guidance instead, unless you pass `--download-tools` (or set `VIGIE_AUTO_DOWNLOAD=1`).
 Minimum supported versions: **kind ≥ v0.20.0**, **k3d ≥ v5.4.0**.
 
+Each test installs the chart as a helm release in its own namespace and uninstalls it afterwards,
+so cluster-scoped objects (ClusterRoles, webhook configurations) do not leak into the next test.
+Chart hooks (e.g. a pre-install Job generating certificates) run and are waited for, up to 5
+minutes, on `kind`, `k3d` and `kubeconfig`; `envtest` has no controllers to complete a hook Job,
+so it installs without hooks.
+
 Backend-specific provisioning flags go through `test.cluster.<backend>.extraArgs` in
 `.vigie.yaml` (e.g. a kind `--config` for a multi-node topology). Downloaded binaries are statically-linked
 Go executables that run on NixOS as-is; a `nix profile install kind k3d` is picked up from
