@@ -22,6 +22,7 @@ type Config struct {
 	Lint     LintConfig     `yaml:"lint" json:"lint,omitempty"`
 	Validate ValidateConfig `yaml:"validate" json:"validate,omitempty"`
 	Test     TestConfig     `yaml:"test" json:"test,omitempty"`
+	Schemas  SchemasConfig  `yaml:"schemas" json:"schemas,omitempty"`
 	Run      RunConfig      `yaml:"run" json:"run,omitempty"`
 }
 
@@ -95,6 +96,23 @@ type ValidateConfig struct {
 	SetLiteral []string `yaml:"setLiteral" json:"setLiteral,omitempty"`
 	// Ignore suppresses specific schema violations.
 	Ignore []ValidateIgnoreRule `yaml:"ignore" json:"ignore,omitempty"`
+}
+
+// SchemasConfig controls the kubeconform pass shared by `vigie validate` and
+// the template tier of `vigie test`.
+type SchemasConfig struct {
+	// Locations are searched in order for each kind's JSON Schema, in
+	// kubeconform `-schema-location` syntax: `default` (the upstream Kubernetes
+	// schemas), a URL template such as the CRDs catalog
+	// `https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json`,
+	// or a local directory (relative paths resolve against the chart) for
+	// offline runs. Empty means `[default]`.
+	Locations []string `yaml:"locations" json:"locations,omitempty"`
+	// AllowUnknownFields accepts fields a schema does not declare. Default
+	// false: an undeclared field, most often a typo, fails validation. Strict
+	// checking uses each location's `-strict` schema variant
+	// (`{{.StrictSuffix}}` in a URL template); `default` provides them.
+	AllowUnknownFields bool `yaml:"allowUnknownFields" json:"allowUnknownFields,omitempty"`
 }
 
 // ValidateIgnoreRule suppresses a kubeconform finding by kind, name, and

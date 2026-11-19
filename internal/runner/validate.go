@@ -58,7 +58,7 @@ func RunValidate(opts ValidateOptions) ([]SuiteResult, error) {
 	// so the in-memory schema cache amortises across scenarios.
 	validators := make(map[string]*render.SchemaValidator, len(kubeVersions))
 	for _, kv := range kubeVersions {
-		sv, err := render.NewSchemaValidator(kv)
+		sv, err := render.NewSchemaValidator(schemaOptions(opts.Cfg.Schemas, opts.ChartPath, kv))
 		if err != nil {
 			return nil, fmt.Errorf("creating schema validator for %s: %w", kv, err)
 		}
@@ -125,11 +125,12 @@ func runValidateOverlay(opts ValidateOptions, overlayPath string, kubeVersions [
 		}
 
 		sv := validators[kv]
-		schemaErrs, err := sv.Validate(result.Objects())
+		report, err := sv.Validate(result.Objects())
 		if err != nil {
 			tr.Failures = append(tr.Failures, fmt.Sprintf("        schema validation error: %v", err))
 		}
-		for _, se := range schemaErrs {
+		tr.UncheckedKinds = report.UncheckedKinds
+		for _, se := range report.Errors {
 			if shouldIgnoreSchemaError(se, opts.Ignore) {
 				continue
 			}
