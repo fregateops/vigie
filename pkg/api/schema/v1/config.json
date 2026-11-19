@@ -70,6 +70,10 @@
         "path": {
           "type": "string",
           "description": "Path is the kubeconfig file to reach the cluster with. Mirrors\n`helm --kubeconfig`. No shell expansion happens, so `~` is not a home\ndirectory here. Overridden by `--kubeconfig`."
+        },
+        "context": {
+          "type": "string",
+          "description": "Context is the kubeconfig context to test against. Empty uses the file's\ncurrent-context. Mirrors `helm --kube-context`; overridden by\n`--kube-context`."
         }
       },
       "additionalProperties": false,

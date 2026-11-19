@@ -166,3 +166,8 @@ test:
       # No shell expansion happens here, so write it out in full rather than
       # using `~`; relative paths resolve against the working directory.
       path: /home/me/.kube/config
+      # Context to test against. Empty/omitted uses the file's current-context.
+      # vigie prints the context and API server it targets before running, and
+      # hands lifecycle hooks a kubeconfig pinned to that context. Overridden
+      # by the `--kube-context` CLI flag.
+      context: kind-dev

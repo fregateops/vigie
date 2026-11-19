@@ -202,6 +202,10 @@ type KubeconfigBackendConfig struct {
 	// `helm --kubeconfig`. No shell expansion happens, so `~` is not a home
 	// directory here. Overridden by `--kubeconfig`.
 	Path string `yaml:"path" json:"path,omitempty"`
+	// Context is the kubeconfig context to test against. Empty uses the file's
+	// current-context. Mirrors `helm --kube-context`; overridden by
+	// `--kube-context`.
+	Context string `yaml:"context" json:"context,omitempty"`
 }
 
 // Defaults holds the values every test inherits unless a suite-level
