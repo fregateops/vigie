@@ -19,15 +19,6 @@ jobs:
       - name: go build
         run: go build ./...
 
-      - name: build every release target
-        # goreleaser ships these six; a platform-specific API (e.g. a Unix-only
-        # syscall field) breaks only the release otherwise.
-        run: |
-          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
-            echo "building $target"
-            GOOS=${target%/*} GOARCH=${target#*/} CGO_ENABLED=0 go build -o /dev/null ./cmd/vigie
-          done
-
       - name: schema up to date
         run: make check-schema
 
@@ -38,6 +29,38 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.15.0
+
+  cross-build:
+    # goreleaser also ships windows and darwin; a platform-specific API (e.g. a
+    # Unix-only syscall field) would otherwise break only the release. Linux is
+    # built by every other job, and arm64 shares amd64's OS-specific files, so
+    # one target per other OS is enough.
+    name: cross-build (windows, darwin)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27"
+          cache: false
+
+      # setup-go's cache is shared by every job and saved by whichever finishes
+      # first, so it never holds windows/darwin objects; this one does.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: cross-build-${{ hashFiles('go.sum') }}
+          restore-keys: cross-build-
+
+      - name: build windows/amd64 and darwin/arm64
+        run: |
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o /dev/null ./cmd/vigie & windows=$!
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o /dev/null ./cmd/vigie & darwin=$!
+          wait "$windows"
+          wait "$darwin"
 
   smoke-cli:
     name: smoke CLI (testdata chart)
