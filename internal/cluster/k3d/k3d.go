@@ -35,8 +35,18 @@ type Backend struct {
 	k3dBinPath  string
 	kubecfgPath string
 	restConfig  *rest.Config
-	started     bool
+	state       clusterState
 }
+
+// clusterState tracks what Stop must clean up: once creation has begun the
+// cluster may exist, even if Start then failed or was interrupted.
+type clusterState int
+
+const (
+	notCreated clusterState = iota
+	creating
+	running
+)
 
 // New returns an unstarted k3d Backend.
 // clusterName is used as-is; pass a unique name (e.g. derived from a session ID)
@@ -54,6 +64,10 @@ func New(clusterName, kubeVersion string, extraArgs []string, opts doctor.Resolv
 func (b *Backend) Start(ctx context.Context) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	if b.state != notCreated {
+		return fmt.Errorf("k3d cluster %q already started", b.clusterName)
+	}
 
 	resolved, err := doctor.ResolveK3d(ctx, b.opts)
 	if err != nil {
@@ -98,17 +112,11 @@ func (b *Backend) Start(ctx context.Context) error {
 		clog.Progress("k3d: detected /dev/mapper on host; bind-mounting into k3s container")
 	}
 	clog.Progress("k3d: creating cluster %q image=%q apiPort=localhost:%d", b.clusterName, imageTag, apiPort)
+	b.state = creating
 	createCmd := exec.CommandContext(ctx, k3dPath, args...)
 	if out, createErr := createCmd.CombinedOutput(); createErr != nil {
-		_ = os.RemoveAll(dataDir)
 		return fmt.Errorf("creating k3d cluster %q: %w\n%s", b.clusterName, createErr, out)
 	}
-	// Mark started right after `k3d cluster create` succeeds - docker
-	// containers now exist and must be torn down on any subsequent failure
-	// (writeKubeconfig, BuildConfigFromFlags, waitAPIStable). Before this,
-	// `stopLocked` was a no-op when called from those failure paths because
-	// `started` was still false, leaking the cluster.
-	b.started = true
 
 	if err := b.writeKubeconfig(ctx, k3dPath); err != nil {
 		_ = b.stopLocked(context.Background())
@@ -135,6 +143,7 @@ func (b *Backend) Start(ctx context.Context) error {
 	clog.Progress("k3d: cluster %q ready", b.clusterName)
 
 	b.restConfig = restCfg
+	b.state = running
 	return nil
 }
 
@@ -197,7 +206,7 @@ func (b *Backend) Stop(ctx context.Context) error {
 }
 
 func (b *Backend) stopLocked(ctx context.Context) error {
-	if !b.started {
+	if b.state == notCreated {
 		return nil
 	}
 	clog.Progress("k3d: deleting cluster %q", b.clusterName)
@@ -211,7 +220,7 @@ func (b *Backend) stopLocked(ctx context.Context) error {
 	if b.kubecfgPath != "" {
 		_ = os.RemoveAll(filepath.Dir(b.kubecfgPath))
 	}
-	b.started = false
+	b.state = notCreated
 	b.kubecfgPath = ""
 	b.restConfig = nil
 	return nil
@@ -228,7 +237,7 @@ func (b *Backend) LoadImages(ctx context.Context, images []string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if !b.started {
+	if b.state != running {
 		return errNotStarted
 	}
 
