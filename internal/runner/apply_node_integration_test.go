@@ -4,13 +4,13 @@ package runner
 
 import (
 	"context"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/fregateops/vigie/internal/cluster"
 	"github.com/fregateops/vigie/internal/config"
+	"github.com/fregateops/vigie/internal/integrationtest"
 )
 
 // TestRunApply_NodeBackends provisions a real node-backed cluster (kind, k3d)
@@ -29,7 +29,7 @@ func TestRunApply_NodeBackends(t *testing.T) {
 
 	for _, backendType := range backends {
 		t.Run(backendType, func(t *testing.T) {
-			skipUnlessNodeToolingPresent(t, backendType)
+			integrationtest.NodeBackendTools(t, backendType)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 			t.Cleanup(cancel)
@@ -62,19 +62,5 @@ func TestRunApply_NodeBackends(t *testing.T) {
 				t.Fatalf("%s: RunApply reported failures; see logged details above", backendType)
 			}
 		})
-	}
-}
-
-// skipUnlessNodeToolingPresent skips when the backend's CLI or a container
-// runtime is missing - both are prerequisites for provisioning a real cluster.
-func skipUnlessNodeToolingPresent(t *testing.T, tool string) {
-	t.Helper()
-	if _, err := exec.LookPath(tool); err != nil {
-		t.Skipf("%s not found in PATH; skipping %s apply integration test", tool, tool)
-	}
-	if _, err := exec.LookPath("docker"); err != nil {
-		if _, podmanErr := exec.LookPath("podman"); podmanErr != nil {
-			t.Skipf("neither docker nor podman found in PATH; skipping %s apply integration test", tool)
-		}
 	}
 }

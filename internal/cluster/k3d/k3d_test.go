@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"os/exec"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -15,12 +14,11 @@ import (
 
 	"github.com/fregateops/vigie/internal/cluster/k3d"
 	"github.com/fregateops/vigie/internal/doctor"
+	"github.com/fregateops/vigie/internal/integrationtest"
 )
 
 func TestK3dBackend_StartApplyStop(t *testing.T) {
-	if _, err := exec.LookPath("k3d"); err != nil {
-		t.Skip("k3d not found in PATH; skipping k3d integration test")
-	}
+	integrationtest.NodeBackendTools(t, "k3d")
 
 	clusterName := fmt.Sprintf("vigie-k3d-%x", rand.Uint32())
 	backend := k3d.New(clusterName, "", nil, doctor.ResolveOptions{})
@@ -67,9 +65,7 @@ func TestK3dBackend_StartApplyStop(t *testing.T) {
 }
 
 func TestK3dBackend_StopIdempotent(t *testing.T) {
-	if _, err := exec.LookPath("k3d"); err != nil {
-		t.Skip("k3d not found in PATH; skipping k3d integration test")
-	}
+	integrationtest.NodeBackendTools(t, "k3d")
 
 	clusterName := fmt.Sprintf("vigie-k3d-%x", rand.Uint32())
 	backend := k3d.New(clusterName, "", nil, doctor.ResolveOptions{})

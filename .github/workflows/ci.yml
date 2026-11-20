@@ -19,6 +19,15 @@ jobs:
       - name: go build
         run: go build ./...
 
+      - name: build every release target
+        # goreleaser ships these six; a platform-specific API (e.g. a Unix-only
+        # syscall field) breaks only the release otherwise.
+        run: |
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            echo "building $target"
+            GOOS=${target%/*} GOARCH=${target#*/} CGO_ENABLED=0 go build -o /dev/null ./cmd/vigie
+          done
+
       - name: schema up to date
         run: make check-schema
 
@@ -94,3 +103,34 @@ jobs:
         # into the vigie cache, exercising the resolver's download path end to
         # end instead of requiring a preinstalled binary. 
         run: ./vigie test testdata/charts/basic --cluster ${{ matrix.backend }} --download-tools
+
+  integration-k3d:
+    name: integration tests (k3d)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      # Pinned to doctor.DefaultK3dVersion; the checksum comes from that
+      # release's checksums.txt, pinned here rather than fetched alongside
+      # the binary.
+      K3D_VERSION: v5.9.0
+      K3D_SHA256: 06d8f25bc3a971c4eb29e0ff08429b180402db0f4dec838c9eac427e296800a0
+      # Fail instead of skip if k3d or docker is missing, so a broken setup
+      # cannot pass by testing nothing. kind is not installed and skips.
+      VIGIE_INTEGRATION_REQUIRE: k3d,docker
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27"
+          cache: true
+
+      - name: install k3d
+        run: |
+          curl -fsSL -o k3d "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64"
+          echo "${K3D_SHA256}  k3d" | sha256sum --check
+          sudo install -m 0755 k3d /usr/local/bin/k3d
+          k3d version
+
+      - name: integration tests
+        run: go test -tags integration -timeout 20m -run 'K3d|NodeBackends' ./internal/cluster/k3d/ ./internal/runner/
