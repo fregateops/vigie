@@ -39,8 +39,18 @@ type Backend struct {
 	kindPath    string
 	kubecfgPath string
 	restConfig  *rest.Config
-	started     bool
+	state       clusterState
 }
+
+// clusterState tracks what Stop must clean up: once creation has begun the
+// cluster may exist, even if Start then failed or was interrupted.
+type clusterState int
+
+const (
+	notCreated clusterState = iota
+	creating
+	running
+)
 
 // New returns an unstarted kind Backend.
 // clusterName is used as-is; pass a unique name (e.g. derived from a session ID)
@@ -60,7 +70,7 @@ func (b *Backend) Start(ctx context.Context) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if b.started {
+	if b.state != notCreated {
 		return fmt.Errorf("kind cluster %q already started", b.clusterName)
 	}
 
@@ -86,11 +96,10 @@ func (b *Backend) Start(ctx context.Context) error {
 	args = append(args, b.extraArgs...)
 
 	clog.Progress("kind: creating cluster %q nodeImage=%q (timeout %s)", b.clusterName, nodeImage, waitTimeout)
+	b.state = creating
 	if out, createErr := b.runKind(ctx, args...); createErr != nil {
-		_ = os.RemoveAll(dataDir)
 		return fmt.Errorf("creating kind cluster %q: %w\n%s", b.clusterName, createErr, out)
 	}
-	b.started = true
 	clog.Progress("kind: cluster %q ready", b.clusterName)
 
 	restCfg, err := clientcmd.BuildConfigFromFlags("", b.kubecfgPath)
@@ -99,6 +108,7 @@ func (b *Backend) Start(ctx context.Context) error {
 		return fmt.Errorf("building REST config from kind kubeconfig: %w", err)
 	}
 	b.restConfig = restCfg
+	b.state = running
 	return nil
 }
 
@@ -110,7 +120,7 @@ func (b *Backend) Stop(ctx context.Context) error {
 }
 
 func (b *Backend) stopLocked(ctx context.Context) error {
-	if !b.started {
+	if b.state == notCreated {
 		return nil
 	}
 	clog.Progress("kind: deleting cluster %q", b.clusterName)
@@ -123,7 +133,7 @@ func (b *Backend) stopLocked(ctx context.Context) error {
 	if b.kubecfgPath != "" {
 		_ = os.RemoveAll(filepath.Dir(b.kubecfgPath))
 	}
-	b.started = false
+	b.state = notCreated
 	b.kubecfgPath = ""
 	b.restConfig = nil
 	return nil
@@ -141,7 +151,7 @@ func (b *Backend) LoadImages(ctx context.Context, images []string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if !b.started {
+	if b.state != running {
 		return errNotStarted
 	}
 	if len(images) == 0 {

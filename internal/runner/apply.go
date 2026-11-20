@@ -93,10 +93,12 @@ func RunApply(ctx context.Context, opts ApplyOptions) ([]SuiteResult, error) {
 	}
 
 	clog.Progress("apply: starting %s backend (this may take a moment)", opts.BackendType)
+	// Registered before Start: an interrupted or failed start can leave a
+	// half-created cluster that only Stop removes.
+	defer stopBackend(opts)
 	if err := opts.Backend.Start(ctx); err != nil {
 		return nil, fmt.Errorf("setup error: starting %s backend: %w", opts.BackendType, err)
 	}
-	defer stopBackend(opts)
 
 	if len(opts.Images) > 0 {
 		clog.Progress("apply: loading %d image(s) into the cluster: %s", len(opts.Images), strings.Join(opts.Images, ", "))

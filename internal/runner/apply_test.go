@@ -1,7 +1,10 @@
 package runner
 
 import (
+	"errors"
+
 	"context"
+	"k8s.io/client-go/rest"
 	"strings"
 	"testing"
 
@@ -150,5 +153,34 @@ func TestBackendTier(t *testing.T) {
 		if got := backendTier(tc.backend); got != tc.want {
 			t.Errorf("backendTier(%q) = %q, want %q", tc.backend, got, tc.want)
 		}
+	}
+}
+
+// failingStartBackend simulates a cluster whose creation was interrupted
+// half-way: Start fails after resources may already exist.
+type failingStartBackend struct{ stopped bool }
+
+func (b *failingStartBackend) Start(context.Context) error {
+	return errors.New("k3d cluster create: signal: interrupt")
+}
+func (b *failingStartBackend) Stop(context.Context) error                 { b.stopped = true; return nil }
+func (b *failingStartBackend) RESTConfig() *rest.Config                   { return nil }
+func (b *failingStartBackend) Kubeconfig() string                         { return "" }
+func (b *failingStartBackend) LoadImages(context.Context, []string) error { return nil }
+
+func TestRunApply_StopsTheBackendWhenStartFails(t *testing.T) {
+	backend := &failingStartBackend{}
+	_, err := RunApply(context.Background(), ApplyOptions{
+		ChartPath:   "testdata/none",
+		TestFiles:   []string{"x_test.yaml"},
+		Cfg:         config.DefaultConfig(),
+		Backend:     backend,
+		BackendType: "k3d",
+	})
+	if err == nil {
+		t.Fatal("want the start error")
+	}
+	if !backend.stopped {
+		t.Fatal("a failed or interrupted start must still stop the backend, or a half-created cluster leaks")
 	}
 }
