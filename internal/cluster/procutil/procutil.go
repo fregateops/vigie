@@ -40,8 +40,8 @@ type ProcessSpec struct {
 	// LogFile, when non-empty, receives both stdout and stderr and is closed
 	// on Stop.
 	LogFile *os.File
-	// NewProcessGroup puts the child in its own process group (Setpgid) so a
-	// SIGTERM aimed at the vigie parent's group isn't re-routed to it.
+	// NewProcessGroup puts the child in its own process group so a signal
+	// aimed at the vigie parent's group isn't re-routed to it.
 	NewProcessGroup bool
 }
 
@@ -62,7 +62,7 @@ func Start(spec ProcessSpec) (*ManagedProcess, error) {
 		cmd.Stderr = spec.Stderr
 	}
 	if spec.NewProcessGroup {
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		cmd.SysProcAttr = newProcessGroupAttr()
 	}
 
 	if err := cmd.Start(); err != nil {
