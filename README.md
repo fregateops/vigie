@@ -56,13 +56,6 @@ Chart hooks (e.g. a pre-install Job generating certificates) run and are waited 
 minutes, on `kind`, `k3d` and `kubeconfig`; `envtest` has no controllers to complete a hook Job,
 so it installs without hooks.
 
-Shell commands in test files (`beforeAll`/`afterAll`/`setup`/`teardown` hooks and secret
-`generate:`) run with a minimal environment: `PATH`, `HOME`, `USER`, `SHELL`, `TMPDIR`, locale
-and terminal variables, `KUBECONFIG` (pinned to the tested cluster) and `VIGIE_SUITE`,
-`VIGIE_TEST`, `VIGIE_NAMESPACE`. Anything else from vigie's own environment, such as a CI
-secret, must be named in the command's `passEnv:` list. On timeout or Ctrl-C the command's
-whole process group is killed.
-
 To test an image your CI job just built without pushing it anywhere, pass
 `--load-image <image>` (repeatable) with `--cluster kind|k3d`: vigie loads it into the cluster
 nodes before any test runs, so the chart can use it with `pullPolicy: Never`.
@@ -76,20 +69,37 @@ Go executables that run on NixOS as-is; a `nix profile install kind k3d` is pick
 
 ## Installation
 
-Build from source with Nix (Go 1.27):
+As a Helm plugin (downloads the release binary for your platform and verifies its checksum):
 
 ```sh
-git clone https://github.com/fregateops/vigie
-cd vigie
-nix develop --command make build   # -> dist/vigie
-./dist/vigie version
+helm plugin install https://github.com/fregateops/vigie --version v0.6.0
+helm vigie test ./mychart
 ```
 
-Or with a local Go 1.27+ toolchain:
+As a standalone binary: download `vigie_<os>_<arch>.tar.gz` (`.zip` on Windows) from the
+[releases page](https://github.com/fregateops/vigie/releases) and check it against
+`checksums.txt`. Builds exist for linux, darwin and windows, on amd64 and arm64.
+
+With a Go 1.27+ toolchain:
 
 ```sh
-go build -o vigie ./cmd/vigie
+go install github.com/fregateops/vigie/cmd/vigie@latest
 ```
+
+As [pre-commit](https://pre-commit.com) hooks, `vigie-lint` and `vigie-unit` run `vigie lint`
+and `vigie test` on the chart in the current directory:
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/fregateops/vigie
+    rev: v0.6.0
+    hooks:
+      - id: vigie-lint
+      - id: vigie-unit
+```
+
+From source, see [Development](#development).
 
 ---
 
@@ -361,6 +371,102 @@ asserts:
 
 Set `forEach: true` on a test to run every assertion against **all** documents matching `target`.
 A `target` that matches several documents without `forEach` fails the same way as no target.
+
+### Cluster tests: live matchers, dependencies and hooks
+
+With `--cluster`, every test installs the chart into a fresh namespace (`vg-<test>-<hex>`), then
+evaluates its assertions. Ordinary matchers still read the rendered manifests; the matchers below
+read the cluster instead. Live matchers that take a `namespace` default to the test's namespace.
+
+| Matcher | Needs | Checks |
+|---|---|---|
+| `applies: {}` | `envtest` and up | The API server accepted the install |
+| `rejected: { reason, message }` | `envtest` and up | The install was rejected; `message` is a regex |
+| `waitFor: { kind, name, condition, timeout }` | `kind`, `k3d`, `kubeconfig` | A status condition becomes true |
+| `becomesReady: { kind, name, timeout }` | `kind`, `k3d`, `kubeconfig` | The workload reports Ready |
+| `lookup: { kind, name \| labelSelector, within, until, then \| forEach }` | `kind`, `k3d`, `kubeconfig` | Fetches live objects and runs ordinary matchers on them |
+| `eventEmitted: { involvedObject, reason, type, within }` | `kind`, `k3d`, `kubeconfig` | An Event fired for an object |
+| `logsContain: { pod: { name \| labelSelector }, container, pattern, within }` | `kind`, `k3d`, `kubeconfig` | A container logged a line; `/.../` makes `pattern` a regex |
+| `http: { via, target, path, method, headers, body, retries, assert }` | `kind`, `k3d`, `kubeconfig` | An HTTP request reaches the workload (`via`: `portforward` by default, `nodeport`, `ingress`, `direct`) and its `status`, `bodyContains`, `headers` or `jsonPath` match |
+
+A suite using any of them declares `tier: apiserver` (only `applies`/`rejected`) or `tier: e2e`.
+When a cluster test fails, vigie adds the namespace's unready pods (with their waiting or
+termination reasons) and its latest Warning events to the failure.
+
+**Dependencies** are installed before the tests that need them, in `dependsOn` order (independent
+ones in parallel), and torn down afterwards:
+
+```yaml
+dependencies:
+  - name: db-credentials
+    scope: suite                 # suite (default) | test | cluster
+    namespace: postgres
+    source:
+      secret:
+        keys:
+          - key: postgres-password
+            env: DB_PASSWORD     # env | file | generate: { run: ... }, with an optional fallback:
+            fallback: { key: postgres-password, file: ./fixtures/password }
+  - name: postgres
+    dependsOn: [db-credentials]
+    source:                      # installed as release "postgres" in namespace "postgres"
+      helm: { chart: postgresql, repo: https://charts.bitnami.com/bitnami, version: "16.x" }
+    values: { auth: { existingSecret: db-credentials } }
+    exports: { host: postgres-postgresql.postgres.svc }
+tests:
+  - it: connects to the database
+    inputs:
+      set:
+        database.host: ${{ deps.postgres.host }}
+```
+
+- Sources: `helm` (a chart from a repo, or a local path), `manifest` (a YAML file), `kustomize`
+  (a directory), `secret` (an Opaque Secret built from env vars, files or a command), and `ref`
+  (a YAML file with a `dependencies:` list to inline). Paths resolve against the test file's
+  directory, except `ref`, which resolves against the directory vigie runs from.
+- Scopes: `suite` lives for the file, `test` is reinstalled into each test's namespace, and
+  `cluster` is installed once per run and reused across suites; vigie does not remove it.
+- `exports` publish values a test reads in `inputs.set` with `${{ deps.<name>.<key> }}`.
+- A dependency never modifies or deletes an object it did not create: an existing object without
+  vigie's `vigie.io/managed-by` label fails the install instead.
+
+**Lifecycle hooks** run shell commands around a suite (`beforeAll`, `afterAll`) or a test (`setup`,
+`teardown`):
+
+```yaml
+beforeAll:
+  - run: kubectl apply -f ./fixtures/crds.yaml
+    timeout: 1m                  # default 2m
+setup:
+  - run: ./scripts/seed.sh "$VIGIE_NAMESPACE"
+    passEnv: [REGISTRY_TOKEN]
+```
+
+Hooks, and secret `generate:` commands, run with a minimal environment: `PATH`, `HOME`, `USER`,
+`SHELL`, `TMPDIR`, locale and terminal variables, `KUBECONFIG` (pinned to the tested cluster),
+`VIGIE_SUITE`, `VIGIE_TEST`, `VIGIE_NAMESPACE`, and the command's own `env:`. Anything else from
+vigie's environment, such as a CI secret, must be listed in `passEnv:`. On timeout or Ctrl-C the
+command's whole process group is killed.
+
+[`testdata/charts/basic/tests/integration`](./testdata/charts/basic/tests/integration) has a
+working suite for every live matcher, dependency source and hook.
+
+### Running in CI
+
+```yaml
+# .github/workflows/chart.yml
+jobs:
+  chart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: helm plugin install https://github.com/fregateops/vigie --version v0.6.0
+      - run: helm vigie lint ./chart && helm vigie validate ./chart
+      - run: helm vigie test ./chart -o junit > unit.xml
+      - run: docker build -t myapp:ci .
+      # kind/k3d are downloaded on demand; the freshly built image is loaded, not pushed.
+      - run: helm vigie test ./chart --cluster kind --download-tools --load-image myapp:ci -o junit > e2e.xml
+```
 
 ### Helper (`call:`) tests
 
