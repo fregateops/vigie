@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"os/exec"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -15,24 +14,11 @@ import (
 
 	"github.com/fregateops/vigie/internal/cluster/kind"
 	"github.com/fregateops/vigie/internal/doctor"
+	"github.com/fregateops/vigie/internal/integrationtest"
 )
 
-// requireKind skips when the kind CLI or a container runtime is unavailable -
-// the backend now shells out to kind, so both are prerequisites.
-func requireKind(t *testing.T) {
-	t.Helper()
-	if _, err := exec.LookPath("kind"); err != nil {
-		t.Skip("kind not found in PATH; skipping kind integration test")
-	}
-	if _, err := exec.LookPath("docker"); err != nil {
-		if _, podmanErr := exec.LookPath("podman"); podmanErr != nil {
-			t.Skip("neither docker nor podman found in PATH; skipping kind integration test")
-		}
-	}
-}
-
 func TestKindBackend_StartApplyStop(t *testing.T) {
-	requireKind(t)
+	integrationtest.NodeBackendTools(t, "kind")
 
 	clusterName := fmt.Sprintf("vigie-kind-%x", rand.Uint32())
 	backend := kind.New(clusterName, "", nil, doctor.ResolveOptions{})
@@ -79,7 +65,7 @@ func TestKindBackend_StartApplyStop(t *testing.T) {
 }
 
 func TestKindBackend_StopIdempotent(t *testing.T) {
-	requireKind(t)
+	integrationtest.NodeBackendTools(t, "kind")
 
 	clusterName := fmt.Sprintf("vigie-kind-%x", rand.Uint32())
 	backend := kind.New(clusterName, "", nil, doctor.ResolveOptions{})
