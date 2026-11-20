@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
+	"syscall"
 
 	"github.com/fregateops/vigie/internal/cienv"
 	"github.com/fregateops/vigie/internal/cluster"
@@ -148,7 +150,14 @@ func runTestCmd(cmd *cobra.Command, args []string) error {
 	if len(files) == 0 {
 		warnings = append(warnings, fmt.Sprintf("no test files found under %s", displayTestsRoot(chartPath, testsDir)))
 	} else {
-		results, err := runTests(cmd.Context(), chartPath, cfg, files)
+		ctx := cmd.Context()
+		if flagTestCluster != clusterNone {
+			ctx = cleanupOnInterrupt(ctx)
+		}
+		results, err := runTests(ctx, chartPath, cfg, files)
+		if err != nil && ctx.Err() != nil {
+			exitErr(exitInterrupted, "interrupted during setup (cleanup completed): %v", err)
+		}
 		if err != nil {
 			exitErr(2, "%v", err)
 		}
@@ -157,7 +166,7 @@ func runTestCmd(cmd *cobra.Command, args []string) error {
 		if err := rep.Report(results); err != nil {
 			exitErr(2, "reporting: %v", err)
 		}
-		if cmd.Context().Err() != nil {
+		if ctx.Err() != nil {
 			exitErr(exitInterrupted, "interrupted: tests not yet started were not run (cleanup completed)")
 		}
 
@@ -421,4 +430,15 @@ func snapshotMode() snapshot.Mode {
 		return snapshot.Update
 	}
 	return snapshot.Compare
+}
+
+// cleanupOnInterrupt returns a context cancelled by the first Ctrl-C or
+// SIGTERM, so a cluster run stops and tears down what it created instead of
+// dying with it. The handler then steps aside: a second Ctrl-C kills a run
+// whose cleanup hangs. Runs with nothing to clean up keep the default
+// immediate exit.
+func cleanupOnInterrupt(parent context.Context) context.Context {
+	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
+	go func() { <-ctx.Done(); stop() }()
+	return ctx
 }
