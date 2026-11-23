@@ -47,7 +47,7 @@ jobs:
 
       # setup-go's cache is shared by every job and saved by whichever finishes
       # first, so it never holds windows/darwin objects; this one does.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cache/go-build
